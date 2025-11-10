@@ -1,5 +1,5 @@
 // controllers/employeeController.js
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // ===============================================
@@ -12,7 +12,7 @@ const getMe = (req, res) => {
   if (req.employee) {
     res.status(200).json(req.employee);
   } else {
-    res.status(404).json({ message: 'لم يتم العثور على الموظف' });
+    res.status(404).json({ message: "لم يتم العثور على الموظف" });
   }
 };
 
@@ -24,7 +24,7 @@ const getAllEmployees = async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
       // لا نرسل كلمة المرور
       select: {
@@ -53,14 +53,14 @@ const getAllEmployees = async (req, res) => {
         roles: true, // جلب الأدوار المرتبطة
         // جلب عدد الصلاحيات الخاصة
         _count: {
-            select: { specialPermissions: true }
-        }
+          select: { specialPermissions: true },
+        },
       },
     });
     res.status(200).json(employees);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    res.status(500).json({ message: "خطأ في الخادم" });
   }
 };
 
@@ -74,7 +74,7 @@ const updateEmployee = async (req, res) => {
     const data = req.body;
 
     // (ملاحظة: لا نسمح بتحديث كلمة المرور من هنا)
-    delete data.password; 
+    delete data.password;
     // (ولا نسمح بتحديث البريد أو الرقم القومي بسهولة)
     delete data.email;
     delete data.nationalId;
@@ -84,13 +84,12 @@ const updateEmployee = async (req, res) => {
       data: data,
     });
     res.status(200).json(updatedEmployee);
-
   } catch (error) {
-    if (error.code === 'P2025') {
-      return res.status(404).json({ message: 'الموظف غير موجود' });
+    if (error.code === "P2025") {
+      return res.status(404).json({ message: "الموظف غير موجود" });
     }
     console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    res.status(500).json({ message: "خطأ في الخادم" });
   }
 };
 
@@ -101,28 +100,235 @@ const updateEmployee = async (req, res) => {
 const deleteEmployee = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // الأفضل هو "تعطيل" الحساب بدلاً من الحذف الكامل
     // لأن الموظف مرتبط ببيانات تاريخية (معاملات، مهام، ...إلخ)
-    
+
     const archivedEmployee = await prisma.employee.update({
-        where: { id: id },
-        data: {
-            status: 'inactive', // تغيير الحالة إلى "غير نشط"
-        }
+      where: { id: id },
+      data: {
+        status: "inactive", // تغيير الحالة إلى "غير نشط"
+      },
     });
 
-    res.status(200).json({ message: 'تم أرشفة الموظف بنجاح', employee: archivedEmployee });
-
+    res
+      .status(200)
+      .json({ message: "تم أرشفة الموظف بنجاح", employee: archivedEmployee });
   } catch (error) {
-    if (error.code === 'P2025') {
-      return res.status(404).json({ message: 'الموظف غير موجود' });
+    if (error.code === "P2025") {
+      return res.status(404).json({ message: "الموظف غير موجود" });
     }
     console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    res.status(500).json({ message: "خطأ في الخادم" });
   }
 };
 
+// @desc    جلب سجل الحضور لموظف
+// @route   GET /api/employees/:id/attendance
+const getEmployeeAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // (يمكنك إضافة بيانات تجريبية مؤقتًا إذا أردت)
+    // const mockAttendance = [
+    //   { id: 'att1', date: '2025-11-10', status: 'Present', checkIn: '08:55', checkOut: '17:05' },
+    //   { id: 'att2', date: '2025-11-09', status: 'Absent', checkIn: null, checkOut: null },
+    // ];
+    // return res.status(200).json(mockAttendance);
+
+    const attendanceRecords = await prisma.employeeAttendance.findMany({
+      where: { employeeId: id },
+      orderBy: { date: "desc" },
+    });
+
+    res.status(200).json(attendanceRecords);
+  } catch (error) {
+    res
+      .status(500)
+      .json({
+        message: "Error fetching attendance records",
+        error: error.message,
+      });
+  }
+};
+
+// @desc    جلب طلبات الإجازة لموظف
+// @route   GET /api/employees/:id/leave-requests
+const getEmployeeLeaveRequests = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const leaveRequests = await prisma.employeeLeaveRequest.findMany({
+      where: { employeeId: id },
+      orderBy: { startDate: "desc" },
+    });
+
+    res.status(200).json(leaveRequests);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching leave requests", error: error.message });
+  }
+};
+
+
+// --- تاب 817-08 ---
+const getEmployeeSkills = async (req, res) => {
+  try {
+    const skills = await prisma.employeeSkill.findMany({
+      where: { employeeId: req.params.id },
+    });
+    res.status(200).json(skills);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching skills', error: error.message });
+  }
+};
+
+const getEmployeeCertifications = async (req, res) => {
+  try {
+    const certifications = await prisma.employeeCertification.findMany({
+      where: { employeeId: req.params.id },
+    });
+    res.status(200).json(certifications);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching certifications', error: error.message });
+  }
+};
+
+// --- تاب 817-09 ---
+const getEmployeeEvaluations = async (req, res) => {
+  try {
+    const evaluations = await prisma.employeeEvaluation.findMany({
+      where: { employeeId: req.params.id },
+      orderBy: { date: 'desc' },
+    });
+    res.status(200).json(evaluations);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching evaluations', error: error.message });
+  }
+};
+
+// --- تاب 817-10 ---
+const getEmployeePromotions = async (req, res) => {
+  try {
+    const promotions = await prisma.employeePromotion.findMany({
+      where: { employeeId: req.params.id },
+      orderBy: { date: 'desc' },
+    });
+    res.status(200).json(promotions);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching promotions', error: error.message });
+  }
+};
+
+// --- تاب 817-11 (يستخدم نموذج Attachment الموجود) ---
+const getEmployeeAttachments = async (req, res) => {
+  try {
+    // نموذج المرفقات لديك يستخدم uploadedById بدلاً من employeeId
+    const attachments = await prisma.attachment.findMany({
+      where: { uploadedById: req.params.id }, 
+      orderBy: { createdAt: 'desc' },
+    });
+    res.status(200).json(attachments);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching attachments', error: error.message });
+  }
+};
+
+// --- نافذة الصلاحيات (902) ---
+const getEmployeePermissions = async (req, res) => {
+  try {
+    // هذا استعلام معقد يجلب الصلاحيات المباشرة + الصلاحيات من الأدوار
+    const employee = await prisma.employee.findUnique({
+      where: { id: req.params.id },
+      include: {
+        specialPermissions: true, // الصلاحيات المباشرة
+        roles: { // الأدوار
+          include: {
+            permissions: true, // صلاحيات كل دور
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // دمج الصلاحيات ومنع التكرار
+    const permissionsMap = new Map();
+    employee.specialPermissions.forEach(perm => permissionsMap.set(perm.id, perm));
+    employee.roles.forEach(role => {
+      role.permissions.forEach(perm => permissionsMap.set(perm.id, perm));
+    });
+
+    const allPermissions = Array.from(permissionsMap.values());
+    res.status(200).json(allPermissions);
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching permissions', error: error.message });
+  }
+};
+
+// --- النوافذ المنبثقة (تحديث الحالة) ---
+const updateEmployeeStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, frozenUntil, frozenReason } = req.body;
+
+    const updatedEmployee = await prisma.employee.update({
+      where: { id },
+      data: {
+        status: status,
+        frozenUntil: frozenUntil ? new Date(frozenUntil) : null,
+        frozenReason: frozenReason,
+      },
+    });
+    res.status(200).json(updatedEmployee);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating employee status', error: error.message });
+  }
+};
+
+// --- النوافذ المنبثقة (ترقية/تخفيض) ---
+const updateEmployeePromotion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 'newLevel' و 'newPosition' و 'notes' تأتي من الواجهة
+    const { newLevel, newPosition, notes } = req.body; 
+
+    const employee = await prisma.employee.findUnique({ where: { id } });
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // 1. تحديث الموظف نفسه
+    const updatedEmployee = await prisma.employee.update({
+      where: { id },
+      data: {
+        jobLevel: newLevel,
+        position: newPosition,
+      },
+    });
+
+    // 2. تسجيل الترقية في السجل (الجدول الجديد الذي أنشأناه)
+    await prisma.employeePromotion.create({
+      data: {
+        employeeId: id,
+        date: new Date(),
+        oldPosition: employee.position,
+        newPosition: newPosition,
+        oldLevel: employee.jobLevel || 0,
+        newLevel: newLevel,
+        notes: notes,
+      },
+    });
+
+    res.status(200).json(updatedEmployee);
+  } catch (error) {
+    res.status(500).json({ message: 'Error processing promotion', error: error.message });
+  }
+};
 
 // تصدير جميع الوظائف
 module.exports = {
@@ -130,4 +336,14 @@ module.exports = {
   getAllEmployees,
   updateEmployee,
   deleteEmployee,
+  getEmployeeAttachments,
+  getEmployeeAttendance,
+  getEmployeeLeaveRequests,
+  getEmployeeSkills,
+  getEmployeeCertifications,
+  getEmployeeEvaluations,
+  getEmployeePromotions,
+  getEmployeePermissions,
+  updateEmployeeStatus,
+  updateEmployeePromotion,
 };

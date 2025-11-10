@@ -6,7 +6,8 @@ const upload = require('../middleware/uploadMiddleware'); // وسيط الرفع
 const {
   uploadFile,
   getAttachmentsForTransaction,
-  deleteAttachment
+  deleteAttachment,
+  uploadAttachment
 } = require('../controllers/attachmentController');
 
 // حماية جميع المسارات
@@ -16,8 +17,12 @@ router.use(protect);
 // مسار الرفع (يستخدم وسيط الرفع + وسيط الحماية)
 // 'file' هو اسم الحقل في الـ form-data
 // ===============================================
-router.route('/upload')
-  .post(upload.single('file'), uploadFile);
+router.post(
+  '/upload',
+  protect, // (لحماية المسار)
+  upload.single('file'), // (لاستقبال ملف واحد اسمه 'file')
+  uploadAttachment
+);
 
 // ===============================================
 // مسار جلب مرفقات معاملة

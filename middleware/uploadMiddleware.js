@@ -1,41 +1,19 @@
 // middleware/uploadMiddleware.js
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-// تحديد مجلد الحفظ
-const uploadDir = './uploads';
-
-// التأكد من وجود مجلد 'uploads'
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// إعدادات التخزين
+// إعداد مساحة التخزين (يمكنك التعديل عليها لاحقاً لتخزينها في السحابة)
 const storage = multer.diskStorage({
-  // أين سيتم حفظ الملف
-  destination: (req, file, cb) => {
-    cb(null, uploadDir); // احفظ في مجلد 'uploads'
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/'); // (تأكد من إنشاء مجلد 'uploads' في جذر المشروع)
   },
-  // كيف سيتم تسمية الملف
-  filename: (req, file, cb) => {
-    // إنشاء اسم فريد (الوقت الحالي + اسم الملف الأصلي)
+  filename: function (req, file, cb) {
+    // إنشاء اسم فريد للملف
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// (اختياري) فلترة الملفات للسماح بأنواع معينة فقط
-const fileFilter = (req, file, cb) => {
-  // يمكنك هنا تحديد أنواع الملفات المسموحة
-  // (PDF, JPG, PNG, ...إلخ)
-  cb(null, true); // السماح بجميع الملفات حالياً
-};
-
-const upload = multer({ 
-  storage: storage, 
-  fileFilter: fileFilter 
-});
+const upload = multer({ storage: storage });
 
 module.exports = upload;

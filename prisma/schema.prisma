@@ -136,8 +136,16 @@ model Employee {
   frozenUntil        DateTime?
   frozenReason       String?
   password           String
+  permissionsCount   Int?      // ✅ الحقل الجديد
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  attachments        Attachment[] @relation("EmployeeAttachments")
+  attendanceRecords  EmployeeAttendance[]
+  leaveRequests      EmployeeLeaveRequest[]
+  skills             EmployeeSkill[]
+  certifications     EmployeeCertification[]
+  evaluations        EmployeeEvaluation[]
+  promotions         EmployeePromotion[]
   
   roles               JobRole[]      @relation("EmployeeToJobRole")
   specialPermissions  Permission[]   @relation("EmployeeToSpecialPermission")
@@ -148,6 +156,93 @@ model Employee {
   uploadedAttachments Attachment[]
 }
 
+
+// نموذج لسجل الحضور (لتاب 817-07)
+model EmployeeAttendance {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  status    String   // (Present, Absent, On Leave)
+  checkIn   DateTime? @db.Time
+  checkOut  DateTime? @db.Time
+  notes     String?
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+
+  @@index([employeeId, date])
+}
+
+// نموذج لطلبات الإجازات (لتاب 817-07)
+model EmployeeLeaveRequest {
+  id         String   @id @default(cuid())
+  type       String   // (سنوية, مرضية, ...)
+  startDate  DateTime @db.Date
+  endDate    DateTime @db.Date
+  status     String   @default("Pending") // (Pending, Approved, Rejected)
+  reason     String?
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+
+  @@index([employeeId])
+}
+
+// نموذج لمهارات الموظف (لتاب 817-08)
+model EmployeeSkill {
+  id        String @id @default(cuid())
+  category  String // (فنية, إدارية, لغات)
+  skill     String // (AutoCAD, React, إدارة مشاريع)
+  level     String // (مبتدئ, متوسط, خبير)
+  
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  
+  @@index([employeeId])
+}
+
+// نموذج لشهادات الموظف (لتاب 817-08)
+model EmployeeCertification {
+  id         String   @id @default(cuid())
+  name       String   // (PMP, شهادة AWS)
+  authority  String   // (PMI, Amazon)
+  issueDate  DateTime @db.Date
+  expiryDate DateTime? @db.Date
+  
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  
+  @@index([employeeId])
+}
+
+// نموذج لتقييمات الموظف (لتاب 817-09)
+model EmployeeEvaluation {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  evaluator String   // (اسم المُقيّم أو الإدارة)
+  rating    Float    // (التقييم من 5)
+  comments  String?
+  
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  
+  @@index([employeeId, date])
+}
+
+// نموذج لترقيات الموظف (لتاب 817-10)
+model EmployeePromotion {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  oldPosition String
+  newPosition String
+  oldLevel    Int
+  newLevel    Int
+  notes       String?
+  
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  
+  @@index([employeeId, date])
+}
 
 // ------ نموذج الأدوار الوظيفية (شاشة 903) ------
 model JobRole {
@@ -270,9 +365,13 @@ model Attachment {
 
   contract       Contract?    @relation(fields: [contractId], references: [id])
   contractId     String?
-  
+
   client         Client?      @relation(fields: [clientId], references: [id])
   clientId       String?
+
+  // --- أضف هذا الحقل ---
+  employee       Employee?    @relation("EmployeeAttachments", fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String?
 }
 
 

@@ -107,10 +107,63 @@ const deleteAttachment = async (req, res) => {
         res.status(500).json({ message: 'خطأ في الخادم' });
     }
 };
+// @desc    رفع مرفق جديد
+// @route   POST /api/attachments/upload
+const uploadAttachment = async (req, res) => {
+  try {
+    // --- التحقق من المصادقة (Fix #2) ---
+    if (!req.user || !req.user.id) {
+      console.error('Upload Error: req.user is not defined. Check protect middleware.');
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    const uploadedById = req.user.id;
+    // --- نهاية التحقق ---
 
+    const { employeeId, clientId, transactionId, contractId } = req.body;
+
+    // --- التحقق من الملف (Fix #1 - multer) ---
+    if (!req.file) {
+      console.error('Upload Error: req.file is not defined. Check multer setup and frontend key.');
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    // --- نهاية التحقق ---
+
+    console.log('File received:', req.file);
+    console.log('Body data:', req.body);
+
+    const { filename, path, mimetype, size } = req.file;
+
+    const newAttachment = await prisma.attachment.create({
+      data: {
+        fileName: filename,
+        filePath: path, // المسار الذي حفظه multer
+        fileType: mimetype,
+        fileSize: size,
+        uploadedById: uploadedById, // الموظف الذي قام بالرفع (إلزامي)
+        
+        // الحقول الاختيارية بناءً على ما جاء من الواجهة
+        employeeId: employeeId || null,
+        clientId: clientId || null,
+        transactionId: transactionId || null,
+        contractId: contractId || null,
+      },
+    });
+
+    console.log('Attachment created in DB:', newAttachment);
+    res.status(201).json(newAttachment);
+    
+  } catch (error) {
+    console.error('CRITICAL Error in uploadAttachment:', error);
+    res.status(500).json({ 
+      message: 'Server error during file upload', 
+      error: error.message 
+    });
+  }
+};
 
 module.exports = {
   uploadFile,
   getAttachmentsForTransaction,
-  deleteAttachment
+  deleteAttachment,
+  uploadAttachment
 };
