@@ -1,0 +1,34 @@
+// routes/attachmentRoutes.js
+const express = require('express');
+const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware'); // وسيط الرفع
+const {
+  uploadFile,
+  getAttachmentsForTransaction,
+  deleteAttachment
+} = require('../controllers/attachmentController');
+
+// حماية جميع المسارات
+router.use(protect);
+
+// ===============================================
+// مسار الرفع (يستخدم وسيط الرفع + وسيط الحماية)
+// 'file' هو اسم الحقل في الـ form-data
+// ===============================================
+router.route('/upload')
+  .post(upload.single('file'), uploadFile);
+
+// ===============================================
+// مسار جلب مرفقات معاملة
+// ===============================================
+router.route('/transaction/:transactionId')
+  .get(getAttachmentsForTransaction);
+
+// ===============================================
+// مسار حذف مرفق
+// ===============================================
+router.route('/:id')
+  .delete(deleteAttachment);
+  
+module.exports = router;

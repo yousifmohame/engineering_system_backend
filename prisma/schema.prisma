@@ -1,0 +1,299 @@
+// ./prisma/schema.prisma (الإصدار المصحح v3 - باستخدام Json)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===============================================
+// 2. النماذج (Models) الأساسية للنظام
+// ===============================================
+
+// ------ نموذج العميل (شاشة 300) (مُحدث بالكامل) ------
+model Client {
+  id           String  @id @default(cuid())
+  clientCode   String  @unique // كود العميل
+  
+  // --- الحقول الفريدة (يجب أن تبقى في المستوى الأعلى) ---
+  mobile       String  @unique
+  email        String? @unique
+  idNumber     String  @unique
+
+  // --- استخدام نوع "Json" للكائنات المتداخلة ---
+  // هذا يطابق الواجهات (Interfaces) في شاشة v19
+  name         Json // (يطابق ClientName)
+  contact      Json // (يطابق ClientContact)
+  address      Json? // (يطابق ClientAddress)
+  identification Json // (يطابق ClientIdentification)
+
+  // --- باقي بيانات شاشة 300 ---
+  type         String   // (فرد، شركة، جهة حكومية)
+  category     String?  // (VIP, مؤسسة, عادي)
+  nationality  String?
+  occupation   String?
+  company      String?
+  taxNumber    String?
+  rating       Int?     @default(3) 
+  secretRating Int?     @default(50)
+  grade        String?  // (أ, ب, ج)
+  gradeScore   Int?
+  completionPercentage Float?
+  isActive     Boolean  @default(true)
+  notes        String?
+  createdBy    String?  
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // --- العلاقات ---
+  transactions Transaction[]
+  contracts    Contract[]
+  quotations   Quotation[]
+  attachments  Attachment[]
+}
+
+
+// ------ نموذج المعاملة (شاشات 284, 286, 701) ------
+model Transaction {
+  id                String    @id @default(cuid())
+  transactionCode   String    @unique 
+  
+  type                String?   
+  category            String?   
+  projectClassification String? 
+  
+  status              String    @default("Draft")
+  statusColor         String?   @default("#6b7280")
+  priority            String?   @default("متوسط") 
+  location            String?   
+  deedNumber          String?   
+  progress            Float?    @default(0) 
+  
+  description         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  completedDate       DateTime?
+
+  client              Client    @relation(fields: [clientId], references: [id])
+  clientId            String
+  
+  project             Project?  @relation(fields: [projectId], references: [id])
+  projectId           Int?
+  
+  contract            Contract? @relation(fields: [contractId], references: [id])
+  contractId          String?
+  
+  tasks               Task[]    
+  attachments         Attachment[]
+  
+  totalFees           Float? @default(0)
+  paidAmount          Float? @default(0)
+  remainingAmount     Float? @default(0)
+}
+
+
+// ------ نموذج المهمة (شاشة 825) ------
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("Pending")
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId String
+  
+  assignedTo    Employee?   @relation("EmployeeToTask", fields: [assignedToId], references: [id])
+  assignedToId  String?
+}
+
+
+// ------ نموذج الموظفين (شاشة 817) ------
+model Employee {
+  id                 String    @id @default(cuid())
+  employeeCode       String    @unique @default(cuid())
+  name               String
+  nameEn             String?
+  nationalId         String    @unique
+  email              String    @unique
+  phone              String    @unique
+  position           String
+  department         String
+  hireDate           DateTime
+  baseSalary         Float?
+  jobLevel           Int?
+  type               String    @default("full-time")
+  status             String    @default("active")
+  nationality        String?
+  gosiNumber         String?
+  iqamaNumber        String?
+  performanceRating  Float?
+  frozenUntil        DateTime?
+  frozenReason       String?
+  password           String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  
+  roles               JobRole[]      @relation("EmployeeToJobRole")
+  specialPermissions  Permission[]   @relation("EmployeeToSpecialPermission")
+  managedProjects     Project[]
+  assignedTasks       Task[]         @relation("EmployeeToTask")
+  sentMessages        Message[]      @relation("SenderToMessage")
+  conversations       Conversation[] @relation("EmployeeToConversation")
+  uploadedAttachments Attachment[]
+}
+
+
+// ------ نموذج الأدوار الوظيفية (شاشة 903) ------
+model JobRole {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  nameAr           String
+  nameEn           String?
+  description      String?
+  responsibilities String?
+  level            String?
+  department       String?
+  status           String       @default("active")
+  canAssignTasks   Boolean      @default(true)
+  allowMultiple    Boolean      @default(true)
+  allowMultiRole   Boolean      @default(true)
+  order            Int?
+  createdDate      DateTime     @default(now())
+  lastModified     DateTime     @updatedAt
+  modifiedBy       String?
+  parentRole       JobRole?     @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  parentRoleId     String?
+  childRoles       JobRole[]    @relation("RoleHierarchy")
+  
+  employees        Employee[]   @relation("EmployeeToJobRole")
+  permissions      Permission[] @relation("JobRoleToPermission")
+}
+
+
+// ------ نموذج الصلاحيات (شاشة 902) ------
+model Permission {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  name           String
+  description    String?
+  level          String    
+  screenId       String?
+  screenName     String?
+  tabId          String?
+  tabName        String?
+  actionType     String?   
+  status         String    @default("active")
+  frozenType     String?
+  frozenDate     DateTime?
+  frozenUntil    DateTime?
+  frozenBy       String?
+  frozenReason   String?
+  createdDate    DateTime  @default(now())
+  lastModified   DateTime  @updatedAt
+  modifiedBy     String?
+  
+  roles          JobRole[]  @relation("JobRoleToPermission")
+  employees      Employee[] @relation("EmployeeToSpecialPermission")
+}
+
+
+// ------ نموذج المشروع (طلبك الأصلي) ------
+model Project {
+  id          Int       @id @default(autoincrement())
+  title       String    @unique
+  description String?
+  status      String    @default("Pending")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  manager     Employee? @relation(fields: [managerId], references: [id])
+  managerId   String?
+  
+  transactions Transaction[]
+}
+
+
+// ------ نموذج العقد (شاشة 814) ------
+model Contract {
+  id           String    @id @default(cuid())
+  contractCode String    @unique
+  title        String
+  startDate    DateTime
+  endDate      DateTime
+  totalValue   Float
+  status       String    @default("Active")
+  
+  client       Client      @relation(fields: [clientId], references: [id])
+  clientId     String
+  
+  transactions Transaction[]
+  quotation    Quotation?  @relation(fields: [quotationId], references: [id])
+  quotationId  String?     @unique
+  attachments  Attachment[]
+}
+
+
+// ------ نموذج عرض السعر (شاشة 815) ------
+model Quotation {
+  id            String    @id @default(cuid())
+  quotationCode String    @unique
+  status        String    @default("Pending")
+  totalValue    Float
+  createdAt     DateTime  @default(now())
+
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      String
+  
+  contract      Contract?
+}
+
+
+// ------ نموذج المرفقات (شاشة 901) ------
+model Attachment {
+  id        String   @id @default(cuid())
+  fileName  String
+  filePath  String   @unique
+  fileType  String
+  fileSize  Int
+  createdAt DateTime @default(now())
+
+  uploadedBy    Employee @relation(fields: [uploadedById], references: [id])
+  uploadedById  String
+
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+  transactionId  String?
+
+  contract       Contract?    @relation(fields: [contractId], references: [id])
+  contractId     String?
+  
+  client         Client?      @relation(fields: [clientId], references: [id])
+  clientId       String?
+}
+
+
+// ------ نماذج المراسلة (للشات) ------
+model Conversation {
+  id           String       @id @default(cuid())
+  name         String?
+  createdAt    DateTime     @default(now())
+
+  participants Employee[]   @relation("EmployeeToConversation")
+  messages     Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  content        String
+  createdAt      DateTime     @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  
+  sender         Employee     @relation("SenderToMessage", fields: [senderId], references: [id])
+  senderId       String
+}
