@@ -1,4 +1,4 @@
-// controllers/permissionController.js
+// [File: controllers/permissionController.js]
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
@@ -39,10 +39,10 @@ const createPermission = async (req, res) => {
 };
 
 // ===============================================
-// 2. جلب جميع الصلاحيات (لشاشة 902)
-// GET /api/permissions
+// 2. ✅ جلب جميع الصلاحيات الفردية (لشاشة 903)
+// GET /api/permissions/individual  (وأيضاً GET /)
 // ===============================================
-const getAllPermissions = async (req, res) => {
+const getIndividualPermissions = async (req, res) => {
     try {
         const permissions = await prisma.permission.findMany({
             include: {
@@ -62,7 +62,23 @@ const getAllPermissions = async (req, res) => {
 };
 
 // ===============================================
-// 3. إسناد صلاحية إلى دور (شاشة 902 - تاب 08)
+// 3. ✅ جلب مجموعات الصلاحيات (مؤقت)
+// GET /api/permissions/groups
+// ===============================================
+const getPermissionGroups = async (req, res) => {
+    try {
+        // ملاحظة: لا يوجد نموذج "PermissionGroup" في الـ schema.prisma
+        // سنرجع مصفوفة فارغة لإيقاف الخطأ 404 في الواجهة الأمامية
+        res.status(200).json([]);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'خطأ في الخادم' });
+    }
+};
+
+
+// ===============================================
+// 4. إسناد صلاحية إلى دور (شاشة 902 - تاب 08)
 // POST /api/permissions/assign-to-role
 // ===============================================
 const assignPermissionToRole = async (req, res) => {
@@ -91,7 +107,7 @@ const assignPermissionToRole = async (req, res) => {
 };
 
 // ===============================================
-// 4. إسناد صلاحية خاصة لموظف (شاشة 902 - تاب 09)
+// 5. إسناد صلاحية خاصة لموظف (شاشة 902 - تاب 09)
 // POST /api/permissions/assign-to-employee
 // ===============================================
 const assignPermissionToEmployee = async (req, res) => {
@@ -119,11 +135,11 @@ const assignPermissionToEmployee = async (req, res) => {
     }
   };
   
-// (يمكن إضافة RemoveFromRole و RemoveFromEmployee بنفس طريقة disconnect)
 
 module.exports = {
   createPermission,
-  getAllPermissions,
+  getIndividualPermissions, // ✅ تم تغيير الاسم
+  getPermissionGroups,      // ✅ إضافة جديدة
   assignPermissionToRole,
   assignPermissionToEmployee
 };

@@ -282,7 +282,7 @@ model Permission {
   screenName     String?
   tabId          String?
   tabName        String?
-  actionType     String?   
+  actionType     String?
   status         String    @default("active")
   frozenType     String?
   frozenDate     DateTime?
@@ -292,9 +292,29 @@ model Permission {
   createdDate    DateTime  @default(now())
   lastModified   DateTime  @updatedAt
   modifiedBy     String?
-  
   roles          JobRole[]  @relation("JobRoleToPermission")
   employees      Employee[] @relation("EmployeeToSpecialPermission")
+  
+  // --- ✅ الإضافة الجديدة هنا ---
+  groups         PermissionGroup[] @relation("GroupToPermission")
+  // ---------------------------
+}
+
+// --- ✅ نموذج جديد بالكامل ---
+// ------ نموذج مجموعات الصلاحيات (جديد) ------
+model PermissionGroup {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  name             String
+  description      String?
+  
+  // --- ✅ علاقة Many-to-Many مع الصلاحيات ---
+  permissions      Permission[] @relation("GroupToPermission")
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  
+  @@index([code])
 }
 
 

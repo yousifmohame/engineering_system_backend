@@ -45,6 +45,9 @@ app.use('/api/roles', roleRoutes);
 const permissionRoutes = require('./routes/permissionRoutes');
 app.use('/api/permissions', permissionRoutes);
 
+const permissionGroupRoutes = require('./routes/permissionGroupRoutes');
+app.use('/api/permission-groups', permissionGroupRoutes);
+
 const clientRoutes = require('./routes/clientRoutes');
 app.use('/api/clients', clientRoutes);
 
@@ -62,6 +65,11 @@ app.use('/api/quotations', quotationRoutes);
 
 const attachmentRoutes = require('./routes/attachmentRoutes');
 app.use('/api/attachments', attachmentRoutes);
+
+const dashboardRoutes = require('./routes/dashboardRoutes');
+app.use('/api/dashboard', dashboardRoutes);
+
+
 
 // --- مسار تجريبي (يبقى كما هو) ---
 app.get('/', (req, res) => {

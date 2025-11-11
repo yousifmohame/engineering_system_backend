@@ -1,4 +1,4 @@
-// controllers/roleController.js
+// [File: controllers/roleController.js]
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { sendEmail } = require('../services/emailService');
@@ -25,7 +25,8 @@ const createRole = async (req, res) => {
         level,
         department,
         responsibilities,
-        modifiedBy: req.employee.name, // الموظف الذي أنشأ الدور
+        // ✅ هذا السطر سيعمل الآن بفضل إصلاح middleware
+        modifiedBy: req.employee.name, 
       },
     });
     res.status(201).json(newRole);
@@ -57,7 +58,8 @@ const getAllRoles = async (req, res) => {
       },
     });
     res.status(200).json(roles);
-  } catch (error) {
+  } catch (error)
+ {
     console.error(error);
     res.status(500).json({ message: 'خطأ في الخادم' });
   }
@@ -156,11 +158,110 @@ const removeEmployeeFromRole = async (req, res) => {
     }
   };
 
-// (يمكن إضافة GetById, Update, Delete بنفس طريقة المشاريع)
+// --- ✅ 5. إضافة الدوال الجديدة (مؤقتاً) ---
+
+// GET /api/roles/changes
+const getRoleChanges = async (req, res) => {
+  try {
+    // (منطق جلب البيانات الحقيقي يوضع هنا لاحقاً)
+    res.status(200).json([]); // إرجاع مصفوفة فارغة حالياً
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+// GET /api/roles/assignment-lists
+const getAssignmentLists = async (req, res) => {
+  try {
+    res.status(200).json([]); // إرجاع مصفوفة فارغة حالياً
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+// GET /api/roles/notifications
+const getRoleNotifications = async (req, res) => {
+  try {
+    res.status(200).json([]); // إرجاع مصفوفة فارغة حالياً
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+
+// ===============================================
+// 5. ✅ جلب دور واحد مع تفاصيله (للتبويبات 6-14)
+// GET /api/roles/:id
+// ===============================================
+const getRoleById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const role = await prisma.jobRole.findUnique({
+      where: { id: id },
+      include: {
+        permissions: true, // لجلب الصلاحيات المرتبطة (لتاب 903-06)
+        employees: true,   // لجلب الموظفين المرتبطين (لتاب 903-09)
+        parentRole: true,  // لتاب التسلسل الهرمي (903-08)
+        childRoles: true,  // لتاب التسلسل الهرمي (903-08)
+      }
+    });
+
+    if (!role) {
+      return res.status(404).json({ message: 'لم يتم العثور على الدور' });
+    }
+    res.status(200).json(role);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+// ===============================================
+// 6. ✅ تحديث صلاحيات دور معين (لتاب 903-06)
+// PUT /api/roles/:id/permissions
+// ===============================================
+const updateRolePermissions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissionIds } = req.body; // قائمة بـ IDs الصلاحيات المحددة
+
+    if (!Array.isArray(permissionIds)) {
+      return res.status(400).json({ message: 'permissionIds يجب أن تكون مصفوفة' });
+    }
+
+    // .set() هي الطريقة السحرية في Prisma
+    // ستقوم بحذف كل الصلاحيات القديمة وإضافة الجديدة في خطوة واحدة
+    const updatedRole = await prisma.jobRole.update({
+      where: { id: id },
+      data: {
+        permissions: {
+          set: permissionIds.map(pid => ({ id: pid }))
+        }
+      },
+      include: { permissions: true } // إرجاع الصلاحيات المحدثة
+    });
+
+    res.status(200).json(updatedRole.permissions);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في تحديث الصلاحيات' });
+  }
+};
+
 
 module.exports = {
   createRole,
   getAllRoles,
   assignEmployeeToRole,
-  removeEmployeeFromRole
+  removeEmployeeFromRole,
+  getRoleChanges,       // ✅ إضافة
+  getAssignmentLists,   // ✅ إضافة
+  getRoleNotifications,  // ✅ إضافة
+  getRoleById,            // ✅ إضافة
+  updateRolePermissions
 };

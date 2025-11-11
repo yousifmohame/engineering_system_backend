@@ -1,60 +1,78 @@
-// ./controllers/permissionGroupController.js (مُحدث بالكامل)
+// [NEW FILE: controllers/permissionGroupController.js]
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// --- جلب جميع الصلاحيات المنفردة (لشاشة 903) ---
-exports.getAllPermissions = async (req, res) => {
+// ===============================================
+// 1. إنشاء مجموعة صلاحيات جديدة
+// POST /api/permission-groups
+// ===============================================
+const createPermissionGroup = async (req, res) => {
   try {
-    const permissions = await prisma.permission.findMany({
-      orderBy: [
-        { category: 'asc' }, // تجميع حسب الفئة
-        { name: 'asc' }
-      ]
-    });
-    
-    // (تجميع) لتسهيل العرض في الواجهة
-    const groupedPermissions = permissions.reduce((acc, perm) => {
-      const category = perm.category || 'أخرى';
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(perm);
-      return acc;
-    }, {});
+    const { code, name, description, permissionIds } = req.body;
 
-    res.status(200).json(groupedPermissions);
+    if (!code || !name) {
+      return res.status(400).json({ message: 'الكود والاسم مطلوبان' });
+    }
+
+    const newGroup = await prisma.permissionGroup.create({
+      data: {
+        code,
+        name,
+        description,
+        // ربط الصلاحيات المحددة مباشرة عند الإنشاء
+        permissions: {
+          connect: permissionIds ? permissionIds.map(id => ({ id })) : []
+        }
+      },
+      include: { permissions: true }
+    });
+    res.status(201).json(newGroup);
+
   } catch (error) {
-    res.status(500).json({ error: 'حدث خطأ أثناء جلب الصلاحيات', details: error.message });
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'رمز (Code) المجموعة مستخدم بالفعل' });
+    }
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
   }
 };
 
-// --- جلب جميع مجموعات الصلاحيات (لشاشة 903) ---
-exports.getAllPermissionGroups = async (req, res) => {
-    try {
-        const groups = await prisma.permissionGroup.findMany({
-            include: {
-                _count: {
-                    select: { permissions: true }
-                }
-            },
-            orderBy: {
-                name: 'asc'
-            }
-        });
-        
-        // إعادة هيكلة لتطابق واجهة 903
-        const formattedGroups = groups.map(g => ({
-            id: g.id,
-            name: g.name,
-            description: g.description,
-            permissionsCount: g._count.permissions
-        }));
+// ===============================================
+// 2. جلب جميع مجموعات الصلاحيات (لشاشة 903)
+// GET /api/permission-groups
+// ===============================================
+const getAllPermissionGroups = async (req, res) => {
+  try {
+    const groups = await prisma.permissionGroup.findMany({
+      include: {
+        // لجلب عدد الصلاحيات في كل مجموعة
+        _count: {
+          select: { permissions: true },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
 
-        res.status(200).json(formattedGroups);
-    } catch (error) {
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب مجموعات الصلاحيات', details: error.message });
-    }
+    // تنسيق البيانات لتطابق الواجهة الأمامية (التي تتوقع permissionsCount)
+    const formattedGroups = groups.map(group => ({
+      ...group,
+      permissionsCount: group._count.permissions
+    }));
+    
+    res.status(200).json(formattedGroups);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
 };
 
-// (يمكن إضافة باقي عمليات CRUD للمجموعات والصلاحيات هنا: Create, Update, Delete)
+// (يمكنك إضافة دوال GetById, Update, Delete لاحقاً)
+
+module.exports = {
+  createPermissionGroup,
+  getAllPermissionGroups
+};
