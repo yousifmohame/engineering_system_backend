@@ -1,7 +1,8 @@
 // controllers/employeeController.js
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-
+const { sendEmail } = require('../services/emailService');
+const bcrypt = require('bcryptjs');
 // ===============================================
 // 1. جلب الموظف الحالي (من الـ Token)
 // GET /api/employees/me
@@ -64,6 +65,87 @@ const getAllEmployees = async (req, res) => {
   }
 };
 
+const createEmployee = async (req, res) => {
+  try {
+    const {
+      name,
+      nameEn,
+      nationalId,
+      email,
+      phone,
+      password,
+      position,
+      department,
+      hireDate,
+      baseSalary,
+      type,
+      status,
+      nationality,
+      gosiNumber,
+      iqamaNumber
+    } = req.body;
+
+    // التحقق من الحقول الإلزامية
+    if (!name || !nationalId || !email || !phone || !password || !position || !department || !hireDate || !type) {
+      return res.status(400).json({ message: 'الرجاء إدخال جميع الحقول الإلزامية' });
+    }
+
+    // التحقق من وجود الموظف (برقم الهوية أو الإيميل أو الجوال)
+    const employeeExists = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { nationalId: nationalId },
+          { email: email },
+          { phone: phone }
+        ]
+      }
+    });
+
+    if (employeeExists) {
+      return res.status(400).json({ message: 'موظف مسجل بالفعل بنفس رقم الهوية أو الإيميل أو الجوال' });
+    }
+
+    // تشفير كلمة المرور
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // إنشاء الموظف
+    const newEmployee = await prisma.employee.create({
+      data: {
+        name,
+        nameEn,
+        nationalId,
+        email,
+        phone,
+        password: hashedPassword,
+        position,
+        department,
+        // تحويل تاريخ التعيين من نص إلى كائن تاريخ
+        hireDate: new Date(hireDate), 
+        baseSalary: baseSalary ? parseFloat(baseSalary) : null,
+        type,
+        status: status || 'active', // قيمة افتراضية
+        nationality,
+        gosiNumber,
+        iqamaNumber,
+        // (يمكن إضافة باقي الحقول هنا)
+      }
+    });
+
+    // حذف كلمة المرور قبل إرسال الرد
+    delete newEmployee.password;
+
+    res.status(201).json({ message: "تم إنشاء الموظف بنجاح", employee: newEmployee });
+
+  } catch (error) {
+    console.error("Error creating employee:", error);
+    if (error.code === 'P2002') {
+      // خطأ في حالة تكرار حقل فريد
+      return res.status(400).json({ message: `الحقل ${error.meta.target.join(', ')} مستخدم بالفعل` });
+    }
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
 // ===============================================
 // 3. تحديث بيانات موظف (لشاشة 817 - تعديل)
 // PUT /api/employees/:id
@@ -334,6 +416,7 @@ const updateEmployeePromotion = async (req, res) => {
 module.exports = {
   getMe,
   getAllEmployees,
+  createEmployee,
   updateEmployee,
   deleteEmployee,
   getEmployeeAttachments,

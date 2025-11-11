@@ -19,6 +19,7 @@ const {
   getEmployeePermissions,
   updateEmployeeStatus,
   updateEmployeePromotion,
+  createEmployee,
 } = require("../controllers/employeeController");
 
 // حماية جميع المسارات التالية
@@ -28,7 +29,9 @@ router.use(protect);
 router.route("/me").get(getMe);
 
 // GET /api/employees -> جلب كل الموظفين (لشاشة 817)
-router.route("/").get(getAllEmployees);
+router.route("/")
+  .get(getAllEmployees)
+  .post(createEmployee);
 
 // PUT /api/employees/:id -> تحديث موظف
 // DELETE /api/employees/:id -> حذف/أرشفة موظف
