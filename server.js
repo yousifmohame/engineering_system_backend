@@ -24,7 +24,12 @@ const io = new Server(server, {       // ربط Socket.io بالخادم
 // ------------------------------------
 
 // --- Middlewares ---
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:3000", "http://localhost:5173", "https://engineering-system-eight.vercel.app"],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
+
 app.use(express.json());
 
 app.use('/uploads', express.static('uploads'));
@@ -68,7 +73,6 @@ app.use('/api/attachments', attachmentRoutes);
 
 const dashboardRoutes = require('./routes/dashboardRoutes');
 app.use('/api/dashboard', dashboardRoutes);
-
 
 
 // --- مسار تجريبي (يبقى كما هو) ---
