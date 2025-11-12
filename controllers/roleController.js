@@ -22,11 +22,11 @@ const createRole = async (req, res) => {
         nameAr,
         nameEn,
         description,
-        level,
+        level: req.body.level.toString(),
         department,
         responsibilities,
         // ✅ هذا السطر سيعمل الآن بفضل إصلاح middleware
-        modifiedBy: req.employee.name, 
+        modifiedBy: req.user.name,
       },
     });
     res.status(201).json(newRole);

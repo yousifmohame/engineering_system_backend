@@ -24,7 +24,7 @@ const createPermission = async (req, res) => {
             screenId,
             screenName,
             actionType,
-            modifiedBy: req.employee.name,
+            modifiedBy: req.user.name,
         }
     });
     res.status(201).json(newPermission);

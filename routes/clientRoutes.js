@@ -9,7 +9,7 @@ const {
   getAllClients,
   getClientById,
   updateClient,
-  archiveClient, // تحديث هنا
+  deleteClient, // تحديث هنا
 } = require('../controllers/clientController');
 
 router.use(protect); // حماية جميع المسارات
@@ -21,6 +21,6 @@ router.route('/')
 router.route('/:id')
   .get(getClientById)
   .put(updateClient)
-  .delete(archiveClient); // تحديث هنا
+  .delete(deleteClient); // تحديث هنا
 
 module.exports = router;
