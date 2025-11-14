@@ -1,38 +1,27 @@
-// routes/taskRoutes.js
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
-
-// استيراد الوظائف من الـ Controller
 const {
+  getAllTasks,
   createTask,
-  getTasksForTransaction,
-  assignTaskToEmployee,
-  updateTaskStatus,
+  getTaskById,
+  updateTask,
   deleteTask,
+  updateTaskStatus, // <-- إضافة
+  transferTask      // <-- إضافة
 } = require('../controllers/taskController');
 
-// حماية جميع مسارات المهام
-router.use(protect);
+// (المسارات الحالية)
+router.get('/', protect, getAllTasks);
+router.post('/', protect, createTask);
+router.get('/:id', protect, getTaskById);
+router.patch('/:id', protect, updateTask); // (هذا مسار تحديث عام)
+router.delete('/:id', protect, deleteTask);
 
-// POST /api/tasks -> إنشاء مهمة جديدة
-router.route('/')
-  .post(createTask);
-
-// GET /api/tasks/transaction/:transactionId -> جلب مهام معاملة معينة
-router.route('/transaction/:transactionId')
-  .get(getTasksForTransaction);
-
-// PUT /api/tasks/:taskId/assign -> إسناد مهمة لموظف
-router.route('/:taskId/assign')
-  .put(assignTaskToEmployee);
-
-// PUT /api/tasks/:taskId/status -> تحديث حالة المهمة
-router.route('/:taskId/status')
-  .put(updateTaskStatus);
-
-// DELETE /api/tasks/:taskId -> حذف مهمة
-router.route('/:taskId')
-  .delete(deleteTask);
+// --- 💡 إضافة المسارات الجديدة ---
+// (هذه المسارات مخصصة للنوافذ المنبثقة)
+router.patch('/:id/status', protect, updateTaskStatus);
+router.patch('/:id/transfer', protect, transferTask);
+// ---------------------------------
 
 module.exports = router;

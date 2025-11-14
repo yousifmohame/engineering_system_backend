@@ -1,157 +1,194 @@
-// controllers/taskController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// ===============================================
-// 1. إنشاء مهمة جديدة (وربطها بمعاملة)
-// POST /api/tasks
-// ===============================================
-const createTask = async (req, res) => {
+// 1. جلب جميع المهام (مع البيانات التفصيلية)
+const getAllTasks = async (req, res) => {
   try {
-    // transactionId هو المعرّف للمعاملة التي تنتمي لها هذه المهمة
-    const { title, description, dueDate, transactionId, assignedToId } = req.body;
-
-    if (!title || !transactionId) {
-      return res.status(400).json({ message: 'العنوان ومعرّف المعاملة (transactionId) مطلوبان' });
-    }
-
-    const newTask = await prisma.task.create({
-      data: {
-        title,
-        description,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        transactionId,
-        assignedToId, // يمكن إسنادها مباشرة أو لاحقاً
-      },
-    });
-    res.status(201).json(newTask);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
-  }
-};
-
-// ===============================================
-// 2. جلب جميع المهام الخاصة بمعاملة معينة
-// GET /api/tasks/transaction/:transactionId
-// ===============================================
-const getTasksForTransaction = async (req, res) => {
-  try {
-    const { transactionId } = req.params;
     const tasks = await prisma.task.findMany({
-      where: {
-        transactionId: transactionId,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      // جلب اسم الموظف المسندة إليه المهمة
       include: {
+        // لجلب بيانات الموظف المسند إليه
         assignedTo: {
-          select: { name: true, employeeCode: true },
+          select: {
+            id: true,
+            name: true,
+            employeeCode: true
+          }
         },
-      },
-    });
-    res.status(200).json(tasks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
-  }
-};
-
-// ===============================================
-// 3. إسناد مهمة لموظف (وظيفة شاشة 825)
-// PUT /api/tasks/:taskId/assign
-// ===============================================
-const assignTaskToEmployee = async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { employeeId } = req.body; // معرّف الموظف الجديد
-
-    if (!employeeId) {
-      return res.status(400).json({ message: 'معرّف الموظف (employeeId) مطلوب' });
-    }
-
-    const updatedTask = await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        assignedToId: employeeId,
-        status: 'Assigned', // تغيير الحالة تلقائياً إلى "مسندة"
-      },
-      include: {
-        assignedTo: {
-          select: { name: true, employeeCode: true }
+        // لجلب بيانات المعاملة
+        transaction: {
+          select: {
+            id: true,
+            transactionCode: true,
+            description: true // (أو أي حقل يمثل "العنوان")
+          }
         }
       }
     });
-    res.status(200).json(updatedTask);
+
+    // 💡 إعادة هيكلة البيانات لتطابق الواجهة الأمامية
+    const detailedTasks = tasks.map(task => ({
+      ...task,
+      taskNumber: task.id, // يمكنك تغييره إذا كان لديك حقل مخصص
+      transactionTitle: task.transaction?.description || 'معاملة غير معنونة',
+      transactionCode: task.transaction?.transactionCode || 'N/A',
+      // ... باقي الحقول موجودة بالفعل
+    }));
+
+    res.status(200).json(detailedTasks); // إرسال البيانات المفصلة
 
   } catch (error) {
-    if (error.code === 'P2025') {
-        return res.status(404).json({ message: 'المهمة غير موجودة' });
-    }
-    console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    res.status(500).json({ message: 'Error fetching tasks', error: error.message });
   }
 };
 
-// ===============================================
-// 4. تحديث حالة المهمة
-// PUT /api/tasks/:taskId/status
-// ===============================================
-const updateTaskStatus = async (req, res) => {
-    try {
-      const { taskId } = req.params;
-      const { status } = req.body; // الحالة الجديدة (Pending, Completed, etc.)
-  
-      if (!status) {
-        return res.status(400).json({ message: 'الحالة (status) مطلوبة' });
-      }
-  
-      const updatedTask = await prisma.task.update({
-        where: { id: taskId },
-        data: {
-          status: status,
+// 2. إنشاء مهمة جديدة
+const createTask = async (req, res) => {
+  try {
+    const {
+      transactionCode,
+      transactionTitle, // (هذا الحقل غير موجود في نموذج المهمة، هو مرتبط بالمعاملة)
+      taskType,
+      description,
+      assignedToId,
+      startDate,
+      dueDate,
+      priority,
+      estimatedHours,
+      notes,
+      status
+    } = req.body;
+
+    // --- (مهم) ربط المعاملة الصحيحة ---
+    // (نفترض أن الواجهة سترسل 'transactionCode' بدلاً من 'transactionTitle')
+    const transaction = await prisma.transaction.findUnique({
+      where: { transactionCode: transactionCode }
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+    // ------------------------------------
+
+    const newTask = await prisma.task.create({
+      data: {
+        title: description, // (نموذج Prisma يستخدم "title" وليس "description")
+        description: notes, // (أو العكس، بناءً على schema.prisma)
+        status: status || 'Pending',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        priority: priority,
+        estimatedHours: estimatedHours,
+        
+        transaction: {
+          connect: { id: transaction.id }
         },
-      });
-      res.status(200).json(updatedTask);
-  
-    } catch (error) {
-      if (error.code === 'P2025') {
-          return res.status(404).json({ message: 'المهمة غير موجودة' });
+        assignedTo: {
+          connect: { id: assignedToId }
+        }
+        // ... (تحتاج لإضافة 'assignedById' من req.user)
       }
-      console.error(error);
-      res.status(500).json({ message: 'خطأ في الخادم' });
-    }
-  };
+    });
+    res.status(201).json(newTask);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error creating task', error: error.message });
+  }
+};
 
-// ===============================================
+// 3. جلب مهمة واحدة
+const getTaskById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: { assignedTo: true, transaction: true } // (جلب البيانات المرتبطة)
+    });
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching task', error: error.message });
+  }
+};
+
+// 4. تحديث مهمة (عام)
+const updateTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const task = await prisma.task.update({
+      where: { id },
+      data: req.body
+    });
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating task', error: error.message });
+  }
+};
+
 // 5. حذف مهمة
-// DELETE /api/tasks/:taskId
-// ===============================================
 const deleteTask = async (req, res) => {
-    try {
-      const { taskId } = req.params;
-      await prisma.task.delete({
-        where: { id: taskId },
-      });
-      res.status(200).json({ message: 'تم حذف المهمة بنجاح' });
-  
-    } catch (error) {
-      if (error.code === 'P2025') {
-          return res.status(404).json({ message: 'المهمة غير موجودة' });
-      }
-      console.error(error);
-      res.status(500).json({ message: 'خطأ في الخادم' });
-    }
-  };
+  try {
+    const { id } = req.params;
+    await prisma.task.delete({
+      where: { id }
+    });
+    res.status(200).json({ message: 'Task deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting task', error: error.message });
+  }
+};
 
-// تصدير جميع الوظائف
+// --- (دوال إضافية للـ Dialogs) ---
+
+// 6. تحديث حالة المهمة (للإلغاء، الإكمال، التجميد)
+const updateTaskStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes, ...otherData } = req.body; // (مثل: frozenReason, progress)
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        status: status,
+        notes: notes,
+        ...otherData // (لتمرير أي بيانات إضافية مثل التجميد أو نسبة الإنجاز)
+      }
+    });
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating task status', error: error.message });
+  }
+};
+
+// 7. تحويل مهمة (تغيير الموظف)
+const transferTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newEmployeeId, transferReason } = req.body;
+    // const transferBy = req.user.id; // (المشرف الذي قام بالتحويل)
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        assignedToId: newEmployeeId,
+        // (يمكن إضافة سجل للتحويل في الملاحظات)
+        notes: `تم التحويل إلى موظف جديد. السبب: ${transferReason}`
+      }
+    });
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(500).json({ message: 'Error transferring task', error: error.message });
+  }
+};
+
+
+// (تصدير جميع الدوال)
 module.exports = {
+  getAllTasks,
   createTask,
-  getTasksForTransaction,
-  assignTaskToEmployee,
-  updateTaskStatus,
+  getTaskById,
+  updateTask,
   deleteTask,
+  updateTaskStatus,
+  transferTask
 };

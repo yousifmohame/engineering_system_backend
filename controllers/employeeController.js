@@ -411,6 +411,62 @@ const updateEmployeePromotion = async (req, res) => {
     res.status(500).json({ message: 'Error processing promotion', error: error.message });
   }
 };
+const getEmployeesWithStats = async (req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      select: {
+        id: true,
+        employeeCode: true,
+        name: true,
+        department: true,
+        position: true,
+        status: true,
+        // (الآن نجلب حالات المهام فقط، وهو خفيف جداً)
+        assignedTasks: {
+          select: {
+            status: true
+          }
+        }
+      }
+    });
+
+    // 💡 (نقوم بحساب الإحصائيات هنا في الـ Backend)
+    const stats = employees.map(emp => {
+      
+      // (حساب المهام النشطة - يمكن تعديل هذه الحالات)
+      const activeTasks = emp.assignedTasks.filter(
+        t => t.status === 'in-progress' || t.status === 'pending' || t.status === 'not-received'
+      ).length;
+      
+      // (حساب المهام المكتملة)
+      const completedTasks = emp.assignedTasks.filter(
+        t => t.status === 'completed'
+      ).length;
+
+      const totalTasks = activeTasks + completedTasks;
+      
+      return {
+        id: emp.id,
+        code: emp.employeeCode,
+        name: emp.name,
+        department: emp.department,
+        position: emp.position,
+        activeTasks: activeTasks,
+        completedTasks: completedTasks,
+        // (منطق أداء افتراضي محسن)
+        performance: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100,
+        // (منطق "متاح" افتراضي محسن)
+        available: emp.status === 'active' && activeTasks < 5, // (افترض أن الموظف مشغول إذا كان لديه 5 مهام أو أكثر)
+      }
+    });
+
+    res.status(200).json(stats);
+
+  } catch (error) {
+    console.error(error); // (مهم لطباعة الخطأ الحقيقي في الـ console)
+    res.status(500).json({ message: 'Error fetching employee stats', error: error.message });
+  }
+};
 
 // تصدير جميع الوظائف
 module.exports = {
@@ -429,4 +485,5 @@ module.exports = {
   getEmployeePermissions,
   updateEmployeeStatus,
   updateEmployeePromotion,
+  getEmployeesWithStats,
 };

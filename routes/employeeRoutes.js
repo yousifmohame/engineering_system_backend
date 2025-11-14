@@ -20,6 +20,7 @@ const {
   updateEmployeeStatus,
   updateEmployeePromotion,
   createEmployee,
+  getEmployeesWithStats,
 } = require("../controllers/employeeController");
 
 router.route("/")
@@ -28,8 +29,10 @@ router.route("/")
 // حماية جميع المسارات التالية
 router.use(protect);
 
+router.get('/with-stats', protect, getEmployeesWithStats);
 // GET /api/employees/me -> جلب بياناتي (من التوكن)
 router.route("/me").get(getMe);
+
 
 // GET /api/employees -> جلب كل الموظفين (لشاشة 817)
 

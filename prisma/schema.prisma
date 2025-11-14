@@ -190,6 +190,7 @@ model Employee {
   frozenUntil       DateTime?
   frozenReason      String?
   password          String
+  refreshToken      String?
   permissionsCount  Int? // ✅ الحقل الجديد
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
