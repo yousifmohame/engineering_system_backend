@@ -55,6 +55,7 @@ model Client {
   quotations   Quotation[]
   attachments  Attachment[]
   activityLogs ActivityLog[]
+  documents    Document[]
 }
 
 model Payment {
@@ -149,6 +150,7 @@ model Transaction {
   paidAmount      Float?    @default(0)
   remainingAmount Float?    @default(0)
   payments        Payment[]
+  documents       Document[]
 }
 
 // ------ نموذج المهمة (شاشة 825) ------
@@ -211,6 +213,11 @@ model Employee {
   uploadedAttachments Attachment[]
   paymentsReceived    Payment[]     @relation("EmployeeToPayment")
   activitiesPerformed ActivityLog[] @relation("EmployeeToActivityLog")
+  ownedDocuments Document[] @relation("OwnedDocuments")
+  docPermissions DocumentPermission[] @relation("GrantedPermissions")
+  documentActivities DocumentActivity[]
+  documentAccess DocumentPermission[]
+  createdClassifications DocumentClassification[] @relation("CreatedClassifications")
 }
 
 // نموذج لسجل الحضور (لتاب 817-07)
@@ -465,4 +472,112 @@ model Message {
 
   sender   Employee @relation("SenderToMessage", fields: [senderId], references: [id])
   senderId String
+}
+
+// نموذج الوثيقة (يطابق FileItem)
+model Document {
+  id        String   @id @default(cuid())
+  fileNumber String   @unique // رقم الملف
+  name      String   // اسم الملف أو المجلد
+  type      String   // 'file' أو 'folder'
+  extension String?  // امتداد الملف
+  size      Int?     // حجم الملف (بالبايت)
+  filePath  String?  @unique // المسار الفعلي للملف على الخادم
+  
+  createdAt DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+  
+  ownerId   String
+  owner     Employee @relation("OwnedDocuments", fields: [ownerId], references: [id])
+  classificationId String?
+  classification   DocumentClassification? @relation(fields: [classificationId], references: [id])
+  tags      String[] // وسوم
+  version   String   @default("1.0")
+  isShared  Boolean  @default(false)
+  downloads Int      @default(0)
+  views     Int      @default(0)
+
+  // لإدارة هيكلية المجلدات
+  path      String   // المسار الافتراضي (e.g., "/Contracts/ProjectX")
+  parentId  String?
+  parent    Document? @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete:Cascade)
+  children  Document[] @relation("FolderHierarchy")
+
+  // ربط اختياري بالمعاملات والعملاء
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  
+  clientId  String?
+  client    Client? @relation(fields: [clientId], references: [id])
+
+  // علاقات الصلاحيات والأنشطة
+  permissions DocumentPermission[]
+  activities  DocumentActivity[]
+  
+  @@index([ownerId])
+  @@index([parentId])
+  @@index([transactionId])
+  @@index([clientId])
+  @@index([classificationId])
+}
+
+// نموذج صلاحيات الوثيقة (يطابق FilePermission)
+model DocumentPermission {
+  id        String   @id @default(cuid())
+  permissionNumber String @unique @default(cuid())
+  
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      Employee @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accessLevel String // 'view', 'edit', 'delete', 'admin'
+  expiryDate  DateTime?
+  
+  grantedAt   DateTime @default(now())
+  grantedById String
+  grantedBy   Employee @relation("GrantedPermissions", fields: [grantedById], references: [id])
+
+  @@unique([documentId, userId]) // لا يمكن إعطاء صلاحيتين لنفس المستخدم على نفس الملف
+  @@index([userId])
+}
+
+// نموذج أنشطة الوثيقة (يطابق FileActivity)
+model DocumentActivity {
+  id          String   @id @default(cuid())
+  activityNumber String @unique @default(cuid())
+  
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  fileName    String   // اسم الملف (للتسجيل السريع)
+  action      String   // 'upload', 'download', 'edit', 'delete', 'share', 'view'
+  
+  userId      String
+  user        Employee @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  timestamp   DateTime @default(now())
+  ipAddress   String?
+  details     String?
+
+  @@index([documentId])
+  @@index([userId])
+}
+
+// نموذج تصنيفات الوثائق (لتاب 901-04)
+model DocumentClassification {
+  id          String  @id @default(cuid())
+  name        String  @unique // اسم التصنيف (مثال: سري، مخططات، عقود)
+  color       String  @default("#6b7280") // لون مميز (tailwind color or hex)
+  description String? // وصف اختياري
+
+  createdBy   Employee @relation("CreatedClassifications", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+
+  // علاقة بالوثائق
+  documents Document[]
+
+  @@index([createdById])
 }

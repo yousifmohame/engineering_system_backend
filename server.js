@@ -77,6 +77,12 @@ app.use('/api/quotations', quotationRoutes);
 const attachmentRoutes = require('./routes/attachmentRoutes');
 app.use('/api/attachments', attachmentRoutes);
 
+const documentRoutes = require('./routes/documentRoutes');
+app.use('/api/documents', documentRoutes);
+
+const docClassificationRoutes = require('./routes/docClassificationRoutes');
+app.use('/api/document-classifications', docClassificationRoutes);
+
 const dashboardRoutes = require('./routes/dashboardRoutes');
 app.use('/api/dashboard', dashboardRoutes);
 
