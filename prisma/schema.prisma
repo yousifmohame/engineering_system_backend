@@ -113,27 +113,51 @@ model SystemSettings {
   updatedAt DateTime @updatedAt
 }
 
-// ------ نموذج المعاملة (شاشات 284, 286, 701) ------
+// ===============================================
+// (مُعدل ومُصحح) نموذج المعاملة (الكيان الفعلي/House)
+// ===============================================
 model Transaction {
   id              String @id @default(cuid())
   transactionCode String @unique
+  title           String // (هذا هو "عنوان المعاملة" من التبويب 1)
 
-  type                  String?
-  category              String?
-  projectClassification String?
+  // --- 1. علاقة بنوع المعاملة (القالب) ---
+  transactionType   TransactionType? @relation(fields: [transactionTypeId], references: [id])
+  transactionTypeId String?
 
+  // --- 2. الحقول الأساسية (من التبويب 1 و 2) ---
   status      String  @default("Draft")
   statusColor String? @default("#6b7280")
   priority    String? @default("متوسط")
+  description String?
   location    String?
   deedNumber  String?
+
+  // --- 3. بيانات منسوخة من القالب (للتتبع) ---
+  category    String? // (منسوخ من TransactionType)
+  complexity  String? // (منسوخ من TransactionType)
+  duration    Int?    // (المدة الفعلية، قد تبدأ بالقيمة الافتراضية)
   progress    Float?  @default(0)
 
-  description   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  completedDate DateTime?
+  // --- 4. حقول مالية (فعلية) ---
+  totalFees       Float?    @default(0) // (قد يبدأ بالقيمة الافتراضية)
+  paidAmount      Float?    @default(0)
+  remainingAmount Float?    @default(0)
+  fees        Json?   // (TransactionFee[]) الرسوم الفعلية (منسوخة من القالب)
 
+  // --- 5. بيانات موروثة (منسوخة من القالب) ---
+  tasks       Task[]   // (هذا هو الموديل Task الحالي، سنقوم بنسخ المهام إليه)
+  
+  // --- ✅✅✅ هذا هو الإصلاح ✅✅✅ ---
+  // (أعدناه إلى علاقة بدلاً من Json)
+  documents   Document[] 
+  
+  authorities String[] // (string[]) الجهات الفعلية
+  stages      Json?    // (TransactionStage[]) المراحل الفعلية
+  warnings    String[]
+  notes       String[]
+  
+  // --- 6. العلاقات ---
   client   Client @relation(fields: [clientId], references: [id])
   clientId String
 
@@ -143,14 +167,41 @@ model Transaction {
   contract   Contract? @relation(fields: [contractId], references: [id])
   contractId String?
 
-  tasks       Task[]
+  // --- 7. مرفقات وحركات ---
   attachments Attachment[]
+  payments    Payment[]
+  
+  // --- 8. تواريخ ---
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedDate DateTime?
+}
 
-  totalFees       Float?    @default(0)
-  paidAmount      Float?    @default(0)
-  remainingAmount Float?    @default(0)
-  payments        Payment[]
-  documents       Document[]
+model TransactionType {
+  id          String  @id @default(cuid())
+  code        String  @unique // كود داخلي (مثال: BLD-PERMIT)
+  name        String  @unique // الاسم المعروض (مثال: ترخيص بناء)
+  description String? // وصف للنوع
+  isActive    Boolean @default(true)
+
+  // --- [إضافات جديدة بناءً على ملفك التجريبي] ---
+  category    String? // (licenses, properties, etc.)
+  categoryAr  String? // (التراخيص، العقارات)
+  duration    Int?    @default(0) // المدة المتوقعة بالأيام
+  estimatedCost Float?  @default(0) // التكلفة المتوقعة
+  complexity  String? // (simple, medium, complex)
+
+  tasks       Json?   // (TransactionTask[]) المهام الافتراضية
+  documents   String[] // (string[]) المستندات المطلوبة
+  authorities String[] // (string[]) الجهات ذات العلاقة
+  fees        Json?   // (TransactionFee[]) الرسوم الافتراضية
+  stages      Json?   // (TransactionStage[]) المراحل الافتراضية
+  warnings    String[] // (string[]) تحذيرات
+  notes       String[] // (string[]) ملاحظات
+  // --- [نهاية الإضافات] ---
+
+  // علاقة عكسية: هذا النوع مُستخدم في أي معاملات
+  transactions Transaction[]
 }
 
 // ------ نموذج المهمة (شاشة 825) ------

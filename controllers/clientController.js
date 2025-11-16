@@ -258,7 +258,7 @@ const createClient = async (req, res) => {
             description: `تم إنشاء العميل الجديد "${getFullName(newClient.name)}" برقم كود ${newClient.clientCode}.`,
             category: "عميل",
             clientId: newClient.id,
-            performedById: req.user.id, // [cite: uploaded:yousifmohame/engineering_system_backend/engineering_system_backend-ddac7da7fde26eee850f7fc3f62385f0e85d1540/middleware/authMiddleware.js]
+            performedById: req.user.id, // [cite: yousifmohame/engineering_system_backend/engineering_system_backend-53e19ee7b707157328102ba0b47eae73c3f7f3c8/middleware/authMiddleware.js]
           },
         });
       } catch (logError) {
@@ -378,7 +378,7 @@ const updateClient = async (req, res) => {
             description: `تم تحديث بيانات العميل "${getFullName(updatedClient.name)}".`,
             category: "تعديل بيانات",
             clientId: updatedClient.id,
-            performedById: req.user.id, // [cite: uploaded:yousifmohame/engineering_system_backend/engineering_system_backend-ddac7da7fde26eee850f7fc3f62385f0e85d1540/middleware/authMiddleware.js]
+            performedById: req.user.id, // [cite: yousifmohame/engineering_system_backend/engineering_system_backend-53e19ee7b707157328102ba0b47eae73c3f7f3c8/middleware/authMiddleware.js]
           },
         });
       } catch (logError) {
@@ -459,6 +459,44 @@ const getClientById = async (req, res) => {
   }
 };
 
+// ==================================================
+// ✅ 3. (جديد) دالة لجلب قائمة عملاء خفيفة (لشاشة 286)
+// ==================================================
+const getSimpleClients = async (req, res) => {
+  try {
+    const clients = await prisma.client.findMany({
+      select: {
+        id: true,
+        name: true, // (Json)
+        clientCode: true,
+      },
+      where: {
+        isActive: true // جلب العملاء النشطين فقط
+      },
+      // --- ✅✅✅ هذا هو الإصلاح ✅✅✅ ---
+      // (لا يمكن الفرز بحقل 'name' لأنه Json)
+      // (سنقوم بالفرز بالكود بدلاً منه)
+      orderBy: {
+        clientCode: 'asc'
+      },
+      // ------------------------------------
+    });
+
+    // تحويل الاسم إلى نص مقروء
+    const simpleList = clients.map(client => {
+      const fullName = `${client.name?.firstName || ''} ${client.name?.familyName || ''}`.trim();
+      const displayName = `${fullName} (${client.clientCode})`
+      return {
+        id: client.id,
+        name: displayName
+      }
+    });
+    res.json(simpleList);
+  } catch (error) {
+    res.status(500).json({ message: 'فشل في جلب قائمة العملاء المبسطة', error: error.message });
+  }
+};
+
 
 module.exports = {
   getAllClients,
@@ -466,4 +504,5 @@ module.exports = {
   updateClient,
   deleteClient,
   getClientById,
+  getSimpleClients, // ✅ قم بإضافة الدالة الجديدة هنا
 };

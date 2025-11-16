@@ -9,7 +9,8 @@ const {
   getAllClients,
   getClientById,
   updateClient,
-  deleteClient, // تحديث هنا
+  deleteClient,
+  getSimpleClients, // ✅ 1. استيراد الدالة الجديدة
 } = require('../controllers/clientController');
 
 router.use(protect); // حماية جميع المسارات
@@ -18,9 +19,13 @@ router.route('/')
   .get(getAllClients)
   .post(createClient);
 
+// ✅ 2. إضافة المسار المبسط الجديد هنا (قبل :id)
+router.route('/simple')
+  .get(getSimpleClients);
+
 router.route('/:id')
   .get(getClientById)
   .put(updateClient)
-  .delete(deleteClient); // تحديث هنا
+  .delete(deleteClient); 
 
 module.exports = router;
