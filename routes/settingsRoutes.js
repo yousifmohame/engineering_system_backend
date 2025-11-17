@@ -1,4 +1,4 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 const {
   getSystemSettings,
@@ -6,26 +6,61 @@ const {
   createRequestPurpose,
   updateRequestPurpose,
   deleteRequestPurpose,
-} = require("../controllers/settingsController");
-const { protect } = require("../middleware/authMiddleware");
+  getFormDefinition,
+  createFormField,
+  updateFormField,
+  deleteFormField,
+  getFormForRender
+} = require('../controllers/settingsController');
 
-// GET /api/settings/system
-// هذا المسار محمي ويتطلب تسجيل الدخول
-router.get("/system", protect, getSystemSettings);
+const { protect } = require('../middleware/authMiddleware');
 
-// GET /api/settings/request-purposes?type=brief
-router.get("/request-purposes", getRequestPurposes);
+router.use(protect);
+// ===============================================
+// 1. إعدادات النظام
+// ===============================================
 
-// إنشاء غرض جديد
-// POST /api/settings/request-purposes
-router.post("/request-purposes", createRequestPurpose);
+// جلب إعدادات النظام (شاشة 300)
+router.get('/system', getSystemSettings);
 
-// تعديل غرض موجود
-// PUT /api/settings/request-purposes/:id
-router.put("/request-purposes/:id", updateRequestPurpose);
+// ===============================================
+// 2. إدارة أغراض الطلبات (المختصرة والتفصيلية)
+// ===============================================
 
-// حذف غرض
-// DELETE /api/settings/request-purposes/:id
-router.delete("/request-purposes/:id", deleteRequestPurpose);
+// جلب جميع أغراض الطلبات (مع فلترة بالنوع)
+router.get('/request-purposes', getRequestPurposes);
+
+// إنشاء غرض طلب جديد
+router.post('/request-purposes', createRequestPurpose);
+
+// تعديل غرض طلب
+router.put('/request-purposes/:id', updateRequestPurpose);
+
+// حذف غرض طلب
+router.delete('/request-purposes/:id', deleteRequestPurpose);
+
+// ===============================================
+// 3. إدارة "منشئ النماذج" الديناميكي (للمدير - شاشة 701)
+// ===============================================
+
+// جلب تعريف النموذج وحقوله لغرض معين (لفتح "منشئ النماذج")
+router.get('/purposes/:purposeId/form', getFormDefinition);
+
+// إنشاء حقل جديد داخل نموذج
+router.post('/forms/:formId/fields', createFormField);
+
+// تعديل حقل موجود
+router.put('/fields/:fieldId', updateFormField);
+
+// حذف حقل
+router.delete('/fields/:fieldId', deleteFormField);
+
+// ===============================================
+// 4. عرض النموذج الديناميكي (للمستخدم - شاشات 284/286)
+// ===============================================
+
+// جلب تعريف النموذج للعرض (للقراءة فقط)
+router.get('/forms/:purposeId/render', getFormForRender);
+
 
 module.exports = router;

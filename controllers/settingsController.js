@@ -142,6 +142,137 @@ const deleteRequestPurpose = async (req, res) => {
   }
 };
 
+/**
+ * جلب تعريف النموذج وحقوله لغرض معين (لشاشة 701)
+ * GET /api/settings/purposes/:purposeId/form
+ */
+const getFormDefinition = async (req, res) => {
+  const { purposeId } = req.params;
+  try {
+    let form = await prisma.dynamicFormDefinition.findUnique({
+      where: { purposeId: purposeId },
+      include: {
+        fields: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    // إذا لم يكن هناك نموذج، قم بإنشاء واحد تلقائياً لهذا الغرض
+    if (!form) {
+      const purpose = await prisma.requestPurpose.findUnique({ where: { id: purposeId } });
+      if (!purpose) {
+        return res.status(404).json({ error: "Purpose not found." });
+      }
+      
+      form = await prisma.dynamicFormDefinition.create({
+        data: {
+          name: `form_for_${purpose.nameEn.toLowerCase().replace(' ', '_')}`,
+          purposeId: purposeId,
+        },
+        include: { fields: true },
+      });
+    }
+    
+    res.json(form);
+  } catch (error) {
+    console.error("Error fetching form definition:", error);
+    res.status(500).json({ error: "Failed to fetch form definition" });
+  }
+};
+
+/**
+ * إنشاء حقل جديد داخل نموذج
+ * POST /api/settings/forms/:formId/fields
+ * Body: { label, fieldKey, fieldType, order, ... }
+ */
+const createFormField = async (req, res) => {
+  const { formId } = req.params;
+  try {
+    const newField = await prisma.dynamicFormField.create({
+      data: {
+        ...req.body,
+        formId: formId,
+      },
+    });
+    res.status(201).json(newField);
+  } catch (error) {
+    console.error("Error creating form field:", error);
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: "A field with this 'fieldKey' already exists in this form." });
+    }
+    res.status(500).json({ error: "Failed to create form field" });
+  }
+};
+
+/**
+ * تعديل حقل موجود
+ * PUT /api/settings/fields/:fieldId
+ * Body: { label, fieldKey, fieldType, order, ... }
+ */
+const updateFormField = async (req, res) => {
+  const { fieldId } = req.params;
+  try {
+    const updatedField = await prisma.dynamicFormField.update({
+      where: { id: fieldId },
+      data: req.body,
+    });
+    res.json(updatedField);
+  } catch (error) {
+    console.error("Error updating form field:", error);
+    res.status(500).json({ error: "Failed to update form field" });
+  }
+};
+
+/**
+ * حذف حقل
+ * DELETE /api/settings/fields/:fieldId
+ */
+const deleteFormField = async (req, res) => {
+  const { fieldId } = req.params;
+  try {
+    await prisma.dynamicFormField.delete({
+      where: { id: fieldId },
+    });
+    res.status(204).send();
+  } catch (error) {
+    console.error("Error deleting form field:", error);
+    res.status(500).json({ error: "Failed to delete form field" });
+  }
+};
+
+/**
+ * جلب تعريف النموذج للعرض (لشاشات 284/286)
+ * GET /api/forms/:purposeId/render
+ */
+const getFormForRender = async (req, res) => {
+  const { purposeId } = req.params;
+  try {
+    const form = await prisma.dynamicFormDefinition.findFirst({
+      where: { 
+        purposeId: purposeId,
+        purpose: {
+          isActive: true // تأكد أن الغرض نفسه نشط
+        }
+      },
+      include: {
+        fields: {
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+
+    if (!form) {
+      return res.status(404).json({ error: "Active form not found for this purpose." });
+    }
+    
+    res.json(form.fields); // نرسل الحقول فقط للعرض
+  } catch (error) {
+    console.error("Error fetching form for render:", error);
+    res.status(500).json({ error: "Failed to fetch form" });
+  }
+};
+
 
 module.exports = {
   getSystemSettings,
@@ -149,4 +280,9 @@ module.exports = {
   createRequestPurpose,
   updateRequestPurpose,
   deleteRequestPurpose,
+  getFormDefinition,
+  createFormField,
+  updateFormField,
+  deleteFormField,
+  getFormForRender,
 };

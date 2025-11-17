@@ -205,25 +205,68 @@ model TransactionType {
   transactions Transaction[]
 }
 
-// ===============================================
-// نموذج لإدارة أغراض الطلبات (المختصرة والتفصيلية)
-// ===============================================
+// 1. تعديل نموذج "الغرض" الحالي
 model RequestPurpose {
   id          String  @id @default(cuid())
-  type        String  // 'brief' (مختصر) أو 'detailed' (تفصيلي)
-  name        String  // الاسم بالعربي (مثل: إصدار)
-  nameEn      String  // الاسم بالإنجليزي (مثل: Issuance)
-  description String? // الوصف
-  icon        String? // (مثل: '📋')
-  color       String? // (مثل: '#2563eb')
-  isActive    Boolean @default(true) // للتحكم في ظهوره
+  type        String  // 'brief' أو 'detailed'
+  name        String
+  nameEn      String
+  description String?
+  icon        String?
+  color       String?
+  isActive    Boolean @default(true)
 
-  // لضمان عدم تكرار نفس الغرض مرتين
+  // --- ✅ الإضافة الجديدة ---
+  // كل "غرض تفصيلي" أصبح "يملك" تعريف نموذج واحد
+  dynamicForm   DynamicFormDefinition?
+
   @@unique([type, name]) 
 }
 
-// ------ نموذج المهمة (شاشة 825) ------
-// ------ نموذج المهمة (شاشة 825) ------
+// 2. ✅ نموذج "تعريف النموذج" الجديد (الرأس)
+// هذا النموذج يمثل "النموذج" نفسه (مثل: "نموذج تعديل الارتدادات")
+model DynamicFormDefinition {
+  id          String @id @default(cuid())
+  name        String @unique // اسم وصفي (مثل: "form_setbacks")
+  description String?
+
+  // علاقة بـ "الغرض" الذي يتبع له هذا النموذج
+  purpose   RequestPurpose @relation(fields: [purposeId], references: [id], onDelete: Cascade)
+  purposeId String         @unique // نضمن أن الغرض الواحد له نموذج واحد فقط
+
+  // هذا النموذج يمتلك "مجموعة حقول"
+  fields    DynamicFormField[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 3. ✅ نموذج "تعريف الحقل" الجديد (التفاصيل)
+// هذا النموذج يمثل كل "حقل" داخل النموذج
+model DynamicFormField {
+  id        String  @id @default(cuid())
+  label     String  // الاسم المعروض (مثل: "القائم (م)")
+  fieldKey  String  // المفتاح البرمجي (مثل: "current_setback")
+  fieldType String  // 'text', 'number', 'select', 'textarea', 'date'
+  order     Int     @default(0) // ترتيب ظهور الحقل
+  
+  // بيانات اختيارية (مثل قائمة الخيارات للـ Select)
+  optionsJson Json? // مثال: [{ "label": "سكني", "value": "residential" }]
+  
+  // قواعد التحقق (يمكن توسيعها لاحقاً)
+  validationJson Json? // مثال: { "required": true, "min": 0, "max": 100 }
+  
+  // ملاحظات توضيحية للحقل
+  placeholder String?
+
+  // علاقة بالنموذج الذي يتبع له هذا الحقل
+  form   DynamicFormDefinition @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formId String
+
+  @@index([formId])
+  @@unique([formId, fieldKey]) // المفتاح يجب أن يكون فريداً داخل النموذج الواحد
+}
+
 // ------ نموذج المهمة (شاشة 825) ------
 model Task {
   id          String    @id @default(cuid())
