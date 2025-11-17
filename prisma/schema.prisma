@@ -156,6 +156,7 @@ model Transaction {
   stages      Json?    // (TransactionStage[]) المراحل الفعلية
   warnings    String[]
   notes       String[]
+  requestPurposes Json?
   
   // --- 6. العلاقات ---
   client   Client @relation(fields: [clientId], references: [id])
@@ -205,12 +206,28 @@ model TransactionType {
 }
 
 // ------ نموذج المهمة (شاشة 825) ------
+// ------ نموذج المهمة (شاشة 825) ------
+// ------ نموذج المهمة (شاشة 825) ------
 model Task {
   id          String    @id @default(cuid())
+  taskNumber  String?   @unique // <-- أضفنا علامة الاستفهام هنا
   title       String
   description String?
   status      String    @default("Pending")
   dueDate     DateTime?
+  
+  // --- [الإضافات الجديدة] ---
+  priority        String?   @default("medium") // (high, medium, low, urgent)
+  progress        Int?      @default(0)
+  category        String?
+  assignedById    String?   // (ID الموظف الذي أسند المهمة)
+  receivedDate    DateTime?
+  completedDate   DateTime?
+  attachmentsCount Int?      @default(0)
+  commentsCount   Int?      @default(0)
+  fees            Json?     // (لتخزين كائن الأتعاب)
+  // -------------------------
+
   createdAt   DateTime  @default(now())
 
   transaction   Transaction @relation(fields: [transactionId], references: [id])
@@ -218,6 +235,9 @@ model Task {
 
   assignedTo   Employee? @relation("EmployeeToTask", fields: [assignedToId], references: [id])
   assignedToId String?
+  
+  @@index([assignedToId]) // [جديد] لتحسين أداء جلب "مهامي"
+  @@index([transactionId])
 }
 
 // ------ نموذج الموظفين (شاشة 817) ------

@@ -1,6 +1,160 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+const generateNextTaskCode = async () => {
+  const year = new Date().getFullYear();
+  const prefix = `TSK-${year}-`;
+
+  const lastTask = await prisma.task.findFirst({
+    where: { taskNumber: { startsWith: prefix } },
+    orderBy: { taskNumber: 'desc' },
+  });
+
+  let nextNumber = 1;
+  if (lastTask) {
+    try {
+      const lastNumberStr = lastTask.taskNumber.split('-')[2];
+      nextNumber = parseInt(lastNumberStr) + 1;
+    } catch (e) {
+      nextNumber = 1;
+    }
+  }
+  
+  return `${prefix}${String(nextNumber).padStart(5, '0')}`; // TSK-2025-00001
+};
+
+
+// @desc    جلب المهام الخاصة بالموظف المسجل دخوله (لشاشة 999)
+// @route   GET /api/tasks/my-tasks
+const getMyTasks = async (req, res) => {
+  try {
+    const employeeId = req.user.id; // <-- من middleware (protect)
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        assignedToId: employeeId, // <-- [مهم] الفلترة هنا
+      },
+      include: {
+        transaction: {
+          select: {
+            transactionCode: true,
+          },
+        },
+        // (يمكن إضافة assignedBy لاحقاً)
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+
+    // تنسيق البيانات لتطابق الواجهة
+    const formattedTasks = tasks.map(task => ({
+      ...task,
+      // (الواجهة تتوقع transactionNumber وليس transaction.transactionCode)
+      transactionNumber: task.transaction?.transactionCode || 'N/A',
+      // (الواجهة تتوقع assignedBy كاسم، سنحتاج لتعديلها لاحقاً)
+      assignedBy: 'النظام' // (قيمة مؤقتة، يجب جلب اسم المسند)
+    }));
+
+    res.status(200).json(formattedTasks);
+
+  } catch (error) {
+    console.error('Error fetching my tasks:', error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+
+// @desc    إنشاء مهمة جديدة
+// @route   POST /api/tasks
+const createTask = async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      status,
+      dueDate,
+      priority,
+      estimatedHours, // (هذا من الخطأ السابق)
+      progress,
+      category,
+      fees,
+      transactionId,
+      assignedToId
+    } = req.body;
+    
+    const assignedById = req.user.id; // (الموظف الحالي هو من أنشأها)
+
+    if (!title || !transactionId) {
+      return res.status(400).json({ message: 'العنوان و ID المعاملة مطلوبان' });
+    }
+
+    // --- [جديد] ---
+    const taskNumber = await generateNextTaskCode();
+
+    const newTask = await prisma.task.create({
+      data: {
+        taskNumber, // <-- [جديد]
+        title,
+        description,
+        status: status || 'not-received',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        
+        // --- الحقول الجديدة من الـ Schema ---
+        priority: priority || 'medium',
+        progress: progress || 0,
+        category: category,
+        fees: fees,
+        assignedById: assignedById,
+        // ------------------------------------
+
+        transaction: {
+          connect: { id: transactionId }
+        },
+        ...(assignedToId && {
+          assignedTo: {
+            connect: { id: assignedToId }
+          }
+        })
+      }
+    });
+    res.status(201).json(newTask);
+  } catch (error) {
+    console.error('Error creating task:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'بيانات مكررة' });
+    }
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
+// @desc    تحديث مهمة
+// @route   PUT /api/tasks/:id
+const updateTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const dataToUpdate = req.body;
+    
+    // (إزالة الحقول التي لا يجب تحديثها بهذه الطريقة)
+    delete dataToUpdate.id;
+    delete dataToUpdate.taskNumber;
+    delete dataToUpdate.transactionId;
+    delete dataToUpdate.assignedToId;
+
+    const updatedTask = await prisma.task.update({
+      where: { id: id },
+      data: {
+        ...dataToUpdate,
+        ...(dataToUpdate.dueDate && { dueDate: new Date(dataToUpdate.dueDate) }),
+      },
+    });
+    res.status(200).json(updatedTask);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    res.status(500).json({ message: 'خطأ في الخادم' });
+  }
+};
+
 // 1. جلب جميع المهام (مع البيانات التفصيلية)
 const getAllTasks = async (req, res) => {
   try {
@@ -41,58 +195,6 @@ const getAllTasks = async (req, res) => {
   }
 };
 
-// 2. إنشاء مهمة جديدة
-const createTask = async (req, res) => {
-  try {
-    const {
-      transactionCode,
-      transactionTitle, // (هذا الحقل غير موجود في نموذج المهمة، هو مرتبط بالمعاملة)
-      taskType,
-      description,
-      assignedToId,
-      startDate,
-      dueDate,
-      priority,
-      estimatedHours,
-      notes,
-      status
-    } = req.body;
-
-    // --- (مهم) ربط المعاملة الصحيحة ---
-    // (نفترض أن الواجهة سترسل 'transactionCode' بدلاً من 'transactionTitle')
-    const transaction = await prisma.transaction.findUnique({
-      where: { transactionCode: transactionCode }
-    });
-
-    if (!transaction) {
-      return res.status(404).json({ message: 'Transaction not found' });
-    }
-    // ------------------------------------
-
-    const newTask = await prisma.task.create({
-      data: {
-        title: description, // (نموذج Prisma يستخدم "title" وليس "description")
-        description: notes, // (أو العكس، بناءً على schema.prisma)
-        status: status || 'Pending',
-        dueDate: dueDate ? new Date(dueDate) : null,
-        priority: priority,
-        estimatedHours: estimatedHours,
-        
-        transaction: {
-          connect: { id: transaction.id }
-        },
-        assignedTo: {
-          connect: { id: assignedToId }
-        }
-        // ... (تحتاج لإضافة 'assignedById' من req.user)
-      }
-    });
-    res.status(201).json(newTask);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error creating task', error: error.message });
-  }
-};
 
 // 3. جلب مهمة واحدة
 const getTaskById = async (req, res) => {
@@ -108,20 +210,6 @@ const getTaskById = async (req, res) => {
     res.status(200).json(task);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching task', error: error.message });
-  }
-};
-
-// 4. تحديث مهمة (عام)
-const updateTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const task = await prisma.task.update({
-      where: { id },
-      data: req.body
-    });
-    res.status(200).json(task);
-  } catch (error) {
-    res.status(500).json({ message: 'Error updating task', error: error.message });
   }
 };
 
@@ -184,6 +272,7 @@ const transferTask = async (req, res) => {
 
 // (تصدير جميع الدوال)
 module.exports = {
+  getMyTasks,
   getAllTasks,
   createTask,
   getTaskById,

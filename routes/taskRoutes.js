@@ -7,10 +7,12 @@ const {
   getTaskById,
   updateTask,
   deleteTask,
-  updateTaskStatus, // <-- إضافة
-  transferTask      // <-- إضافة
+  updateTaskStatus,
+  transferTask,  
+  getMyTasks
 } = require('../controllers/taskController');
 
+router.get('/my-tasks', protect, getMyTasks);
 // (المسارات الحالية)
 router.get('/', protect, getAllTasks);
 router.post('/', protect, createTask);
