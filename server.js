@@ -74,6 +74,9 @@ app.use('/api/contracts', contractRoutes);
 const quotationRoutes = require('./routes/quotationRoutes');
 app.use('/api/quotations', quotationRoutes);
 
+const appointmentRoutes = require('./routes/appointmentRoutes');
+app.use('/api/appointments', appointmentRoutes);
+
 const attachmentRoutes = require('./routes/attachmentRoutes');
 app.use('/api/attachments', attachmentRoutes);
 
