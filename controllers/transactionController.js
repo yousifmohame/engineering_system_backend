@@ -164,82 +164,163 @@ const getAllTransactions = async (req, res) => {
 // 3. جلب بيانات معاملة واحدة (لعرض التابات 284)
 // GET /api/transactions/:id
 // ===============================================
+// في ملف controllers/transactionController.js
+const convertFlatFeesToCategories = (flatFees) => {
+
+  if (!Array.isArray(flatFees)) {
+    return [];
+  }
+  
+  const groups = {};
+  flatFees.forEach((fee, idx) => {
+
+    const categoryName = fee.authority || 'رسوم عامة';
+    
+    if (!groups[categoryName]) {
+      groups[categoryName] = [];
+    }
+    
+    groups[categoryName].push({
+      id: `fee-tmpl-${idx}`,
+      name: fee.name,
+      amount: fee.amount || 0,
+      paid: 0,
+      remaining: fee.amount || 0,
+      status: 'pending'
+    });
+  });
+
+  const result = Object.keys(groups).map((key, idx) => ({
+    id: `cat-${idx}`,
+    category: key,
+    items: groups[key]
+  }));
+  return result;
+};
+
+
 const getTransactionById = async (req, res) => {
   try {
     const { id } = req.params;
+
     const transaction = await prisma.transaction.findUnique({
-      where: { id: id },
+      where: { id },
       include: {
-        client: true,     // تفاصيل العميل
-        transactionType: true, // (تضمين النوع)
-        project: true,    // تفاصيل المشروع
-        contract: true,   // تفاصيل العقد
-        tasks: {          // قائمة المهام المرتبطة (لشاشة 825)
-          include: {
-            assignedTo: { select: { name: true, employeeCode: true }}
-          }
+        client: true,
+        transactionType: true,
+        project: true,
+        contract: true,
+        tasks: {
+          include: { assignedTo: { select: { name: true, employeeCode: true } } }
         },
-        attachments: {    // المرفقات (لشاشة 901)
-          include: {
-            uploadedBy: { select: { name: true }}
-          }
-        }
+        attachments: {
+          include: { uploadedBy: { select: { name: true } } }
+        },
+        documents: true,
+        payments: true,
+        appointments: true
       },
     });
 
     if (!transaction) {
       return res.status(404).json({ message: 'المعاملة غير موجودة' });
     }
-    res.status(200).json(transaction);
+
+    // --- المنطق الذكي لجلب التكاليف ---
+    let finalCosts = [];
+
+    if (transaction.fees && Array.isArray(transaction.fees) && transaction.fees.length > 0) {
+
+      if (transaction.fees[0].items) {
+        finalCosts = transaction.fees;
+      } else {
+        finalCosts = convertFlatFeesToCategories(transaction.fees);
+      }
+    } 
+    else if (transaction.transactionType && transaction.transactionType.fees) {
+      finalCosts = convertFlatFeesToCategories(transaction.transactionType.fees);
+    } else {
+      console.log("⚠️ No fees found in transaction or template.");
+    }
+
+    const responseData = {
+      ...transaction,
+      costDetails: finalCosts 
+    };
+
+    res.json(responseData);
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    res.status(500).json({ message: 'خطأ في الخادم', error: error.message });
   }
 };
+
 
 // ===============================================
 // 4. تحديث بيانات معاملة (مثل تغيير الحالة)
 // PUT /api/transactions/:id
 // ===============================================
-const updateTransaction = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = req.body;
+// controllers/transactionController.js
 
-    // (تنقية البيانات قبل التحديث)
-    delete data.id; 
-    delete data.client; 
-    delete data.clientId;
-    delete data.transactionCode; // (مهم: لا نغير الكود)
-    
-    // (تحديث العلاقة)
-    if (data.type) {
-      data.transactionTypeId = data.type;
-      delete data.type;
+// controllers/transactionController.js
+
+const updateTransaction = async (req, res) => {
+  const { id } = req.params;
+  
+  // 1. نفصل الحقول الخاصة (costDetails, type) عن باقي البيانات
+  const { costDetails, type, ...otherData } = req.body;
+
+  try {
+    // 2. نجهز كائن البيانات للتحديث
+    let updateData = { ...otherData };
+
+    // ✅ معالجة مشكلة 'type' -> تحويلها إلى 'transactionTypeId'
+    if (type) {
+        updateData.transactionTypeId = type;
+    }
+    // (ملاحظة: المتغير 'type' تم فصله في الخطوة 1، لذا لن يدخل في updateData، وهذا يحل الخطأ)
+
+    // 3. معالجة التكاليف (costDetails -> fees)
+    if (costDetails) {
+       updateData.fees = costDetails; // حفظ الهيكل في حقل fees
+
+       // تحديث الحقول المالية المسطحة
+       const totalFees = costDetails.reduce((sum, cat) => sum + cat.items.reduce((s, i) => s + (i.amount||0), 0), 0);
+       const paidAmount = costDetails.reduce((sum, cat) => sum + cat.items.reduce((s, i) => s + (i.paid||0), 0), 0);
+       const remainingAmount = totalFees - paidAmount;
+
+       updateData.totalFees = totalFees;
+       updateData.paidAmount = paidAmount;
+       updateData.remainingAmount = remainingAmount;
     }
 
-    if (data.progress) data.progress = parseFloat(data.progress);
-    if (data.totalFees) data.totalFees = parseFloat(data.totalFees);
-    if (data.paidAmount) data.paidAmount = parseFloat(data.paidAmount);
-    if (data.remainingAmount) data.remainingAmount = parseFloat(data.remainingAmount);
+    // 4. تنظيف البيانات (حذف الحقول التي لا يجب تحديثها أو التي تسبب مشاكل)
+    delete updateData.id; 
+    delete updateData.client; 
+    delete updateData.clientId; // عادة لا نغير العميل، لكن يمكن تركه إذا كان مطلوباً
+    delete updateData.transactionCode; 
+    delete updateData.transactionType; // علاقة لا يمكن تحديثها مباشرة
+    
+    // تحويل الأرقام (لضمان السلامة)
+    if (updateData.progress) updateData.progress = parseFloat(updateData.progress);
+    if (updateData.totalFees) updateData.totalFees = parseFloat(updateData.totalFees);
 
-
+    // 5. تنفيذ التحديث
     const updatedTransaction = await prisma.transaction.update({
       where: { id: id },
-      data: data,
+      data: updateData,
     });
+
     res.status(200).json(updatedTransaction);
 
   } catch (error) {
-    if (error.code === 'P2025') { // كود عدم العثور
+    if (error.code === 'P2025') {
         return res.status(404).json({ message: 'المعاملة غير موجودة' });
     }
-    console.error(error);
-    res.status(500).json({ message: 'خطأ في الخادم' });
+    console.error("Error updating transaction:", error);
+    res.status(500).json({ message: 'خطأ في الخادم', error: error.message });
   }
 };
-
 // ===============================================
 // 5. حذف معاملة
 // DELETE /api/transactions/:id
@@ -473,6 +554,146 @@ const deleteTransactionType = async (req, res) => {
 };
 
 
+// ✅ دالة جديدة لجلب رسوم القالب
+// في controllers/transactionController.js
+
+const getTemplateFees = async (req, res) => {
+  const { typeId } = req.params;
+  
+  // 1. تتبع الدخول للدالة والـ ID المستلم
+  console.log("➡️ START: getTemplateFees called");
+  console.log("👉 Received typeId:", typeId);
+
+  try {
+    // 2. محاولة الجلب من قاعدة البيانات
+    const transactionType = await prisma.transactionType.findUnique({
+      where: { id: typeId },
+      select: {
+        id: true,
+        name: true,
+        fees: true,         // الرسوم البسيطة القديمة
+        defaultCosts: true, // الرسوم المعقدة الجديدة (JSON)
+      }
+    });
+
+    // 3. عرض النتيجة الخام من قاعدة البيانات
+    console.log("🔍 DB Result (transactionType):", transactionType ? "Found" : "Null");
+    if (transactionType) {
+        console.log("   - Has defaultCosts?", !!transactionType.defaultCosts);
+        console.log("   - defaultCosts Length:", Array.isArray(transactionType.defaultCosts) ? transactionType.defaultCosts.length : "N/A");
+        console.log("   - Has fees?", !!transactionType.fees);
+        console.log("   - fees Length:", Array.isArray(transactionType.fees) ? transactionType.fees.length : "N/A");
+    }
+
+    if (!transactionType) {
+      console.log("❌ Error: Transaction Type not found in DB");
+      return res.status(404).json({ message: 'نوع المعاملة غير موجود' });
+    }
+
+    // 4. فحص منطق الإرجاع
+
+    // الحالة أ: استخدام الهيكل المعقد (defaultCosts)
+    if (transactionType.defaultCosts && Array.isArray(transactionType.defaultCosts) && transactionType.defaultCosts.length > 0) {
+      console.log("✅ SUCCESS: Returning 'defaultCosts' from DB");
+      console.log("📦 Payload:", JSON.stringify(transactionType.defaultCosts, null, 2)); // طباعة البيانات المرسلة
+      return res.json(transactionType.defaultCosts);
+    }
+
+    // الحالة ب: استخدام الهيكل البسيط (fees) وتحويله
+    if (transactionType.fees && Array.isArray(transactionType.fees) && transactionType.fees.length > 0) {
+      console.log("⚠️ INFO: 'defaultCosts' is empty. Falling back to simple 'fees'.");
+      
+      const mappedFees = [
+        {
+          id: 'cat-default',
+          category: 'الرسوم الأساسية',
+          items: transactionType.fees.map((fee, index) => ({
+            id: `fee-${index}`,
+            name: fee.name,
+            amount: fee.amount || 0,
+            paid: 0,
+            remaining: fee.amount || 0,
+            status: 'pending'
+          }))
+        }
+      ];
+      console.log("✅ SUCCESS: Returning mapped 'fees'");
+      return res.json(mappedFees);
+    }
+
+    // الحالة ج: لا يوجد بيانات
+    console.log("⚠️ WARNING: No fees found in either 'defaultCosts' or 'fees'. Returning empty array.");
+    return res.json([]);
+
+  } catch (error) {
+    console.error("❌ FATAL ERROR in getTemplateFees:", error);
+    res.status(500).json({ message: 'فشل في جلب رسوم القالب', error: error.message });
+  }
+};
+
+// ✅ دالة جديدة لتحديث مهام المعاملة
+const updateTransactionTasks = async (req, res) => {
+  const { id } = req.params;
+  const { tasks } = req.body; // مصفوفة المهام من الفرونت إند
+
+  try {
+    // 1. جلب المهام الموجودة حالياً في قاعدة البيانات لهذه المعاملة
+    const existingTasks = await prisma.task.findMany({
+      where: { transactionId: id },
+      select: { id: true }
+    });
+    const existingIds = existingTasks.map(t => t.id);
+
+    // 2. تحديد المهام التي يجب حذفها (موجودة في DB وغير موجودة في القائمة الجديدة)
+    // ملاحظة: نفترض أن الفرونت إند يرسل الـ ID الصحيح للمهام الموجودة
+    const incomingIds = tasks.filter(t => t.id && existingIds.includes(t.id)).map(t => t.id);
+    const idsToDelete = existingIds.filter(eid => !incomingIds.includes(eid));
+
+    // 3. تنفيذ العمليات داخل Transaction لضمان السلامة
+    await prisma.$transaction(async (tx) => {
+      // أ) حذف المهام المحذوفة
+      if (idsToDelete.length > 0) {
+        await tx.task.deleteMany({
+          where: { id: { in: idsToDelete } }
+        });
+      }
+
+      // ب) إنشاء أو تحديث المهام
+      for (const task of tasks) {
+        const taskData = {
+          title: task.name, // تعيين الاسم للعنوان
+          priority: task.priority,
+          status: task.status === 'in-progress' ? 'In Progress' : (task.status === 'completed' ? 'Completed' : 'Pending'),
+          // إذا كان الموظف مسنداً
+          assignedToId: task.assignedToId || null,
+          transactionId: id,
+          // ملاحظة: إذا لم يكن لديك حقل duration في قاعدة البيانات، يمكنك تخزينه في الوصف مؤقتاً
+          // description: `Duration: ${task.duration} days`, 
+        };
+
+        if (task.id && existingIds.includes(task.id)) {
+          // تحديث
+          await tx.task.update({
+            where: { id: task.id },
+            data: taskData
+          });
+        } else {
+          // إنشاء جديد
+          await tx.task.create({
+            data: taskData
+          });
+        }
+      }
+    });
+
+    res.json({ message: 'تم تحديث المهام بنجاح' });
+
+  } catch (error) {
+    console.error("Error updating tasks:", error);
+    res.status(500).json({ message: 'فشل في تحديث المهام', error: error.message });
+  }
+};
+
 module.exports = {
   createTransaction,
   getAllTransactions,
@@ -485,4 +706,6 @@ module.exports = {
   createTransactionType,
   updateTransactionType,
   deleteTransactionType,
+  getTemplateFees,
+  updateTransactionTasks,
 };

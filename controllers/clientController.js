@@ -279,118 +279,105 @@ const createClient = async (req, res) => {
 };
 
 // تحديث عميل
+// تحديث عميل
 const updateClient = async (req, res) => {
-  const { clientId } = req.params;
+  const { id: clientId } = req.params;
   try {
-    const {
-      clientCode, // (يتم تجاهله، لا نسمح بتحديثه)
-      mobile,
-      email,
-      idNumber,
-      name,
-      contact,
-      address,
-      identification,
-      type,
-      category,
-      nationality,
-      occupation,
-      company,
-      taxNumber,
-      rating,
-      secretRating,
-      notes,
-      isActive,
-    } = req.body;
+    // 1. جلب البيانات الحالية للعميل من قاعدة البيانات
+    const existingClient = await prisma.client.findUnique({
+      where: { id: clientId },
+      include: {
+        transactions: true // نحتاج المعاملات لحساب الدرجة بدقة
+      }
+    });
 
-    if (!mobile || !idNumber || !name) {
-      return res.status(400).json({ message: 'الجوال، رقم الهوية، والاسم مطلوبات' });
+    if (!existingClient) {
+      return res.status(404).json({ message: 'لم يتم العثور على العميل' });
     }
 
-    const completionPercentage = calculateCompletionPercentage(req.body);
-    const gradeInfo = calculateClientGrade(req.body, completionPercentage);
+    // 2. دمج البيانات الجديدة مع البيانات القديمة
+    // (نستخدم البيانات الجديدة إن وجدت، وإلا نستخدم القديمة)
+    const mergedData = {
+      ...existingClient,
+      ...req.body, // البيانات القادمة من الطلب تطغى على القديمة
+      // التأكد من دمج حقول الـ JSON بشكل صحيح
+      name: req.body.name || existingClient.name,
+      contact: req.body.contact ? { ...existingClient.contact, ...req.body.contact } : existingClient.contact,
+      address: req.body.address ? { ...existingClient.address, ...req.body.address } : existingClient.address,
+      identification: req.body.identification ? { ...existingClient.identification, ...req.body.identification } : existingClient.identification,
+    };
 
+    // 3. إعادة حساب النسبة والدرجة بناءً على البيانات المدمجة الكاملة
+    const completionPercentage = calculateCompletionPercentage(mergedData);
+    const gradeInfo = calculateClientGrade(mergedData, completionPercentage);
+
+    // 4. تنفيذ التحديث في قاعدة البيانات
     const updatedClient = await prisma.client.update({
       where: { id: clientId },
       data: {
-        mobile,
-        email,
-        idNumber,
-        name,
-        contact,
-        address,
-        identification,
-        type,
-        category,
-        nationality,
-        occupation,
-        company,
-        taxNumber,
-        rating,
-        secretRating,
-        notes,
-        isActive,
+        // الحقول المباشرة (تحديثها فقط إذا تم إرسالها)
+        mobile: req.body.mobile,
+        email: req.body.email,
+        idNumber: req.body.idNumber,
+        type: req.body.type,
+        category: req.body.category,
+        nationality: req.body.nationality,
+        occupation: req.body.occupation,
+        company: req.body.company,
+        taxNumber: req.body.taxNumber,
+        rating: req.body.rating, // يمكن تحديثه مباشرة
+        secretRating: req.body.secretRating, // يمكن تحديثه مباشرة
+        notes: req.body.notes,
+        isActive: req.body.isActive,
+        
+        // حقول الـ JSON
+        name: req.body.name ? req.body.name : undefined, 
+        contact: req.body.contact ? req.body.contact : undefined,
+        address: req.body.address ? req.body.address : undefined,
+        identification: req.body.identification ? req.body.identification : undefined,
+
+        // الحقول المحسوبة (يتم تحديثها دائماً)
         completionPercentage,
         grade: gradeInfo.grade,
         gradeScore: gradeInfo.score,
-        // ❌ لا يتم تحديث clientCode
       },
-      include: { // إرجاع نفس البيانات المحدثة
-        transactions: {
-          include: {
-            payments: true,
-          },
-        },
+      include: {
+        transactions: { include: { payments: true } },
         contracts: true,
         quotations: true,
         attachments: true,
         activityLogs: {
-          include: {
-            performedBy: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: {
-            date: 'desc'
-          }
+          include: { performedBy: { select: { id: true, name: true } } },
+          orderBy: { date: 'desc' }
         },
-         _count: {
-          select: {
-            transactions: true,
-            contracts: true,
-            quotations: true
-          }
+        _count: {
+          select: { transactions: true, contracts: true, quotations: true }
         }
       },
     });
 
     res.json(updatedClient);
 
-    // تسجيل النشاط
-    if (updatedClient) {
-      try {
-        await prisma.activityLog.create({
-          data: {
-            action: "تعديل عميل",
-            description: `تم تحديث بيانات العميل "${getFullName(updatedClient.name)}".`,
-            category: "تعديل بيانات",
-            clientId: updatedClient.id,
-            performedById: req.user.id, // [cite: yousifmohame/engineering_system_backend/engineering_system_backend-53e19ee7b707157328102ba0b47eae73c3f7f3c8/middleware/authMiddleware.js]
-          },
-        });
-      } catch (logError) {
-        console.error("Failed to create activity log:", logError);
-      }
+    // تسجيل النشاط (Activity Log)
+    try {
+      await prisma.activityLog.create({
+        data: {
+          action: "تعديل عميل",
+          description: `تم تحديث بيانات العميل "${getFullName(updatedClient.name)}".`,
+          category: "تعديل بيانات",
+          clientId: updatedClient.id,
+          performedById: req.user.id,
+        },
+      });
+    } catch (logError) {
+      console.error("Failed to create activity log:", logError);
     }
+
   } catch (error) {
     if (error.code === 'P2002') {
       return res.status(400).json({ 
         message: 'فشل التحديث: تضارب في البيانات', 
-        error: `البيانات (مثل الجوال أو الإيميل أو رقم الهوية) مستخدمة مسبقاً.`,
-        details: error.meta.target
+        error: `البيانات (مثل الجوال أو الإيميل) مستخدمة مسبقاً.` 
       });
     }
     console.error("Error updating client:", error);
@@ -400,7 +387,7 @@ const updateClient = async (req, res) => {
 
 // حذف عميل
 const deleteClient = async (req, res) => {
-  const { clientId } = req.params;
+  const { id: clientId } = req.params;
   try {
     // اختياري: تسجيل النشاط قبل الحذف
     const client = await prisma.client.findUnique({ where: { id: clientId } });
@@ -430,7 +417,7 @@ const deleteClient = async (req, res) => {
 
 // جلب عميل واحد (من ملفك الأصلي)
 const getClientById = async (req, res) => {
-  const { clientId } = req.params;
+  const { id: clientId } = req.params;
   try {
     const client = await prisma.client.findUnique({
       where: { id: clientId },

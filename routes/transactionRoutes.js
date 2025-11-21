@@ -15,7 +15,9 @@ const {
   updateTransactionType,
   deleteTransactionType,
   getSimpleTransactionTypes,
-  getFullTransactionTypes
+  getFullTransactionTypes,
+  getTemplateFees,
+  updateTransactionTasks
 } = require('../controllers/transactionController');
 
 // حماية جميع مسارات المعاملات
@@ -45,6 +47,8 @@ router.route('/types')
   .get(getTransactionTypes)
   .post(createTransactionType);
 
+router.get('/template-fees/:typeId', protect, getTemplateFees);
+
 // --- 3. (جديد) مسارات لتعديل/حذف نوع معين ---
 // PUT /api/transactions/types/:id    -> (جديد) تعديل نوع
 // DELETE /api/transactions/types/:id -> (جديد) حذف نوع
@@ -62,5 +66,7 @@ router.route('/:id')
   .get(getTransactionById)
   .put(updateTransaction)
   .delete(deleteTransaction);
+
+router.put('/:id/tasks', protect, updateTransactionTasks);
 
 module.exports = router;

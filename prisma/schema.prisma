@@ -155,7 +155,8 @@ model Transaction {
   authorities String[] // (string[]) الجهات الفعلية
   stages      Json?    // (TransactionStage[]) المراحل الفعلية
   warnings    String[]
-  notes       String[]
+  notes       Json?    @default("{}")
+  approvals   Json?    @default("{}")
   requestPurposes Json?
   
   // --- 6. العلاقات ---
