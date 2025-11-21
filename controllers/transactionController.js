@@ -218,7 +218,20 @@ const getTransactionById = async (req, res) => {
         },
         documents: true,
         payments: true,
-        appointments: true
+        appointments: true,
+        transactionEmployees: {
+          include: {
+            employee: { // (اختياري) لجلب بيانات الموظف مباشرة من العلاقة
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                position: true
+              }
+            }
+          }
+        },
       },
     });
 
@@ -694,6 +707,50 @@ const updateTransactionTasks = async (req, res) => {
   }
 };
 
+// controllers/transactionController.js
+
+const updateTransactionStaff = async (req, res) => {
+  const { id } = req.params;
+  const { staff } = req.body;
+
+  try {
+    // نمرر 'tx' (transaction client) للدالة الداخلية
+    const result = await prisma.$transaction(async (tx) => {
+      
+      // 1. حذف القديم باستخدام tx
+      await tx.transactionEmployee.deleteMany({
+        where: { transactionId: id }
+      });
+
+      // 2. إضافة الجديد
+      if (staff && staff.length > 0) {
+        await tx.transactionEmployee.createMany({
+          data: staff.map(s => ({
+            transactionId: id,
+            employeeId: s.employeeId,
+            role: s.role
+          }))
+        });
+      }
+
+      // 3. إرجاع البيانات المحدثة
+      return tx.transaction.findUnique({
+        where: { id },
+        include: {
+          transactionEmployees: {
+            include: { employee: true }
+          }
+        }
+      });
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error updating transaction staff:', error);
+    res.status(500).json({ error: 'Failed to update staff', details: error.message });
+  }
+};
+
 module.exports = {
   createTransaction,
   getAllTransactions,
@@ -708,4 +765,5 @@ module.exports = {
   deleteTransactionType,
   getTemplateFees,
   updateTransactionTasks,
+  updateTransactionStaff,
 };
