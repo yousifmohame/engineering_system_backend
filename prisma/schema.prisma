@@ -59,19 +59,30 @@ model Client {
 }
 
 model Payment {
-  id        String   @id @default(cuid())
-  amount    Float
-  date      DateTime @default(now())
-  method    String // (نقدي, شيك, تحويل بنكي, ...)
-  reference String? // (رقم الشيك أو التحويل)
-  notes     String?
+  id            String   @id @default(cuid())
+  amount        Float
+  date          DateTime @default(now())
+  method        String   // (Cash, Check, Transfer) -> سنستخدم 'Cash' لهذه الشاشة
+  reference     String?
+  notes         String?
+  
+  // --- حقول جديدة لدعم الشاشة 936 ---
+  category      String?  @default("أتعاب مكتب") // (أتعاب مكتب، رسوم حكومية، الخ)
+  isFollowUpFee Boolean  @default(false)        // هل هي أتعاب تعقيب؟
+  receiptImage  String?                         // مسار صورة الإيصال
+  // ----------------------------------
 
-  // ✅ يجب إضافة علاقة بالموظف الذي استلم الدفعة
   receivedBy    Employee @relation("EmployeeToPayment", fields: [receivedById], references: [id])
   receivedById  String
+  // ✅ حقل جديد لتخزين تفاصيل التوزيع (أي بنود غطتها هذه الدفعة)
+  // مثال: [{ "itemId": "item-1", "amount": 5000, "name": "تصميم معماري" }]
+  allocations   Json?    @default("[]")
 
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 تعديل
   transactionId String
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([transactionId])
   @@index([receivedById])
@@ -116,7 +127,7 @@ model SystemSettings {
 model TransactionEmployee {
   id            String      @id @default(cuid())
   
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 تأكد من وجودها
   transactionId String
   
   employee      Employee    @relation(fields: [employeeId], references: [id])
@@ -319,7 +330,7 @@ model Task {
 
   createdAt   DateTime  @default(now())
 
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 أضف هذا الجزء
   transactionId String
 
   assignedTo   Employee? @relation("EmployeeToTask", fields: [assignedToId], references: [id])
@@ -599,7 +610,7 @@ model Attachment {
   uploadedBy   Employee @relation(fields: [uploadedById], references: [id])
   uploadedById String
 
-  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 تعديل
   transactionId String?
 
   contract   Contract? @relation(fields: [contractId], references: [id])
@@ -665,8 +676,8 @@ model Document {
   children  Document[] @relation("FolderHierarchy")
 
   // ربط اختياري بالمعاملات والعملاء
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 تعديل
   transactionId String?
-  transaction   Transaction? @relation(fields: [transactionId], references: [id])
   
   clientId  String?
   client    Client? @relation(fields: [clientId], references: [id])
@@ -756,7 +767,7 @@ model Appointment {
   location      String?     // مكان الموعد (اختياري)
   
   // الربط بالمعاملة
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade) // 🔥 تأكد من وجودها
   transactionId String
 
   createdAt     DateTime    @default(now())

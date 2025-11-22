@@ -89,6 +89,9 @@ app.use('/api/document-classifications', docClassificationRoutes);
 const dashboardRoutes = require('./routes/dashboardRoutes');
 app.use('/api/dashboard', dashboardRoutes);
 
+const paymentRoutes = require('./routes/paymentRoutes');
+app.use('/api/payments', paymentRoutes);
+
 // --- مسار تجريبي (يبقى كما هو) ---
 app.get('/', (req, res) => {
   res.json({ message: "مرحباً بك في API شركة الاستشارات الهندسية" });
