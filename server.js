@@ -92,6 +92,15 @@ app.use('/api/dashboard', dashboardRoutes);
 const paymentRoutes = require('./routes/paymentRoutes');
 app.use('/api/payments', paymentRoutes);
 
+const followUpRoutes = require('./routes/followUpRoutes');
+app.use('/api/followup', followUpRoutes);
+
+const riyadhStreetsRoutes = require('./routes/riyadhStreetsRoutes');
+app.use('/api/riyadh-streets', riyadhStreetsRoutes);
+
+const technicalReportsRoutes = require('./routes/technicalReportsRoutes');
+app.use('/api/technical-reports', technicalReportsRoutes);
+
 // --- مسار تجريبي (يبقى كما هو) ---
 app.get('/', (req, res) => {
   res.json({ message: "مرحباً بك في API شركة الاستشارات الهندسية" });

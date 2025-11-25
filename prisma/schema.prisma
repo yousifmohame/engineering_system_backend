@@ -216,6 +216,7 @@ model Transaction {
   completedDate DateTime?
   appointments  Appointment[]
   transactionEmployees TransactionEmployee[]
+  followUpTasks FollowUpTask[]
 }
 
 model TransactionType {
@@ -774,4 +775,132 @@ model Appointment {
   updatedAt     DateTime    @updatedAt
 
   @@index([transactionId])
+}
+
+// ===============================================
+// وحدة إدارة المعقبين (شاشة 937)
+// ===============================================
+
+// 1. نموذج المعقب (Agent)
+model FollowUpAgent {
+  id                 String   @id @default(cuid())
+  type               String   // 'individual' (فرد) or 'entity' (كيان)
+  name               String
+  nationalId         String?  // للأفراد
+  commercialRegister String?  // للكيانات
+  
+  // بيانات الاتصال
+  phone              String
+  email              String?
+  address            String?
+
+  // التخصصات والنطاق
+  specialization     String[] // مصفوفة: [البلدية، الدفاع المدني، ...]
+  governmentEntities String[] // مصفوفة: [الأمانة، الكهرباء، ...]
+
+  // حالة الحساب والأداء
+  joinDate           DateTime @default(now())
+  status             String   @default("active") // 'active', 'inactive', 'suspended'
+  rating             Float    @default(5.0)
+  notes              String?
+
+  // العلاقات
+  tasks              FollowUpTask[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// 2. نموذج مهام التعقيب (Task)
+model FollowUpTask {
+  id               String   @id @default(cuid())
+  
+  // العلاقات
+  agent            FollowUpAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentId          String
+
+  transaction      Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId    String
+
+  // تفاصيل المهمة
+  governmentEntity String   // الجهة: البلدية، الدفاع المدني، إلخ
+  description      String   // وصف المهمة
+  
+  // التواريخ
+  startDate        DateTime @default(now())
+  targetDate       DateTime?
+  completionDate   DateTime?
+
+  // الحالة والنتائج
+  status           String   @default("pending") // 'pending', 'in-progress', 'completed', 'failed'
+  successStatus    String   @default("pending") // 'success', 'failed', 'pending'
+  attempts         Int      @default(0)         // عدد المحاولات
+  
+  // الملاحظات والإفادات
+  notes            String?
+  feedbacks        String[] // مصفوفة لتخزين الإفادات المتعددة
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([agentId])
+  @@index([transactionId])
+}
+
+// ===============================================
+// وحدة شوارع الرياض (شاشة 939)
+// ===============================================
+
+model RiyadhSector {
+  id        String         @id @default(cuid())
+  name      String         @unique // مثال: القطاع الشمالي
+  streets   RiyadhStreet[]
+  createdAt DateTime       @default(now())
+}
+
+model RiyadhDistrict {
+  id        String         @id @default(cuid())
+  name      String         @unique // مثال: حي النرجس
+  streets   RiyadhStreet[]
+  createdAt DateTime       @default(now())
+}
+
+model RiyadhStreet {
+  id           String @id @default(cuid())
+  streetCode   String @unique // مثل: STR-2025-0001
+  name         String
+
+  // العلاقات
+  sector       RiyadhSector   @relation(fields: [sectorId], references: [id])
+  sectorId     String
+  
+  district     RiyadhDistrict @relation(fields: [districtId], references: [id])
+  districtId   String
+
+  // المواصفات الفنية
+  type         String  // 'main', 'secondary', 'branch'
+  width        Float
+  length       Float
+  lanes        Int
+  status       String  // 'active', 'under-construction', 'planned'
+  
+  // الخدمات
+  lighting     Boolean @default(true)
+  sidewalks    Boolean @default(true)
+
+  // الإحداثيات (سنخزنها كـ Float منفصل أو JSON)
+  centerLat    Float
+  centerLng    Float
+
+  // التنظيمات الخاصة (JSON لتخزين الهيكل المعقد)
+  hasSpecialRegulation Boolean @default(false)
+  regulationDetails    Json?   
+  // سيحتوي الـ Json على: 
+  // { regulationType, reason, issuingAuthority, validFrom, validUntil, restrictions[], impacts[], notes }
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([sectorId])
+  @@index([districtId])
 }
